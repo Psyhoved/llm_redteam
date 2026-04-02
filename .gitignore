@@ -1,0 +1,25 @@
+# Environment
+.env
+
+# Dataset files (downloaded by download_datasets.py)
+phase1_inspect/datasets/advbench/
+phase1_inspect/datasets/xstest/
+phase1_inspect/datasets/toxicchat/
+phase1_inspect/datasets/wildjailbreak/
+phase1_inspect/datasets/do_not_answer/
+phase1_inspect/datasets/aya_redteaming/
+
+# Student reports (generated during labs)
+phase1_inspect/reports/*
+phase2_deepteam/reports/*
+!phase1_inspect/reports/.gitkeep
+!phase2_deepteam/reports/.gitkeep
+
+# Inspect AI logs
+*.eval
+logs/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
