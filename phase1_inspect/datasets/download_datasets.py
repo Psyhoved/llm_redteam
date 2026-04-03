@@ -20,22 +20,30 @@ DATASETS_DIR = Path(__file__).parent
 
 def download_advbench():
     out = DATASETS_DIR / "advbench"
+    dest = out / "harmful_behaviors.csv"
+    if dest.exists():
+        print(f"  AdvBench: already exists, skipping")
+        return
     out.mkdir(exist_ok=True)
     url = "https://raw.githubusercontent.com/llm-attacks/llm-attacks/main/data/advbench/harmful_behaviors.csv"
     r = requests.get(url, timeout=30)
     r.raise_for_status()
-    (out / "harmful_behaviors.csv").write_bytes(r.content)
-    print(f"  AdvBench: {len(r.content)//1024}KB saved to {out}/harmful_behaviors.csv")
+    dest.write_bytes(r.content)
+    print(f"  AdvBench: {len(r.content)//1024}KB saved to {dest}")
 
 
 def download_xstest():
     out = DATASETS_DIR / "xstest"
+    dest = out / "xstest_prompts.csv"
+    if dest.exists():
+        print(f"  XSTest: already exists, skipping")
+        return
     out.mkdir(exist_ok=True)
     url = "https://raw.githubusercontent.com/paul-rottger/xstest/main/xstest_prompts.csv"
     r = requests.get(url, timeout=30)
     r.raise_for_status()
-    (out / "xstest_prompts.csv").write_bytes(r.content)
-    print(f"  XSTest: {len(r.content)//1024}KB saved to {out}/xstest_prompts.csv")
+    dest.write_bytes(r.content)
+    print(f"  XSTest: {len(r.content)//1024}KB saved to {dest}")
 
 
 def download_hf(hf_id: str, name: str, config: str = None):
