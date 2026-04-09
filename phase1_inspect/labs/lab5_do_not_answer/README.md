@@ -13,8 +13,8 @@
 ## Задание
 
 ```bash
-inspect eval run.py --model openrouter/openai/gpt-4o-mini
-inspect view
+python -m inspect_ai eval run.py --model openrouter/openai/gpt-4o-mini
+python -m inspect_ai view
 ```
 
 В inspect view фильтруй по `risk_area` в metadata, чтобы увидеть ASR по категориям.

@@ -1,6 +1,9 @@
 """
 Download all Phase 1 datasets into subdirectories.
-Run from phase1_inspect/: python datasets/download_datasets.py
+Run from phase1_inspect/:
+    python datasets/download_datasets.py
+    python datasets/download_datasets.py advbench
+    python datasets/download_datasets.py advbench xstest
 
 Expected disk usage:
 - AdvBench: ~50KB
@@ -10,10 +13,13 @@ Expected disk usage:
 - Do-Not-Answer: ~1MB
 - Aya Redteaming: ~10MB
 """
+import argparse
 import os
 import requests
+from collections import OrderedDict
 from pathlib import Path
 from datasets import load_dataset
+from datasets.exceptions import DatasetNotFoundError
 
 DATASETS_DIR = Path(__file__).parent
 
@@ -65,18 +71,85 @@ def download_hf(hf_id: str, name: str, config: str = None):
     print(f"  {name}: {size}MB saved to {out}")
 
 
-if __name__ == "__main__":
-    print("Downloading Phase 1 datasets...")
-    print("  [1/6] AdvBench")
-    download_advbench()
-    print("  [2/6] XSTest")
-    download_xstest()
-    print("  [3/6] ToxicChat")
+def download_toxicchat():
     download_hf("lmsys/toxic-chat", "toxicchat", config="toxicchat0124")
-    print("  [4/6] WildJailbreak (~1GB — this will take a while)")
+
+
+def download_wildjailbreak():
     download_hf("allenai/wildjailbreak", "wildjailbreak")
-    print("  [5/6] Do-Not-Answer")
+
+
+def download_do_not_answer():
     download_hf("LibrAI/do-not-answer", "do_not_answer")
-    print("  [6/6] Aya Redteaming")
+
+
+def download_aya_redteaming():
     download_hf("CohereLabs/aya_redteaming", "aya_redteaming")
-    print("Done. All datasets saved to phase1_inspect/datasets/")
+
+
+DATASET_SPECS = OrderedDict(
+    [
+        ("advbench", {"label": "AdvBench", "handler": download_advbench}),
+        ("xstest", {"label": "XSTest", "handler": download_xstest}),
+        ("toxicchat", {"label": "ToxicChat", "handler": download_toxicchat}),
+        (
+            "wildjailbreak",
+            {
+                "label": "WildJailbreak (~1GB — this will take a while)",
+                "handler": download_wildjailbreak,
+            },
+        ),
+        ("do_not_answer", {"label": "Do-Not-Answer", "handler": download_do_not_answer}),
+        ("aya_redteaming", {"label": "Aya Redteaming", "handler": download_aya_redteaming}),
+    ]
+)
+
+
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(
+        description="Download one or more Phase 1 datasets into phase1_inspect/datasets/."
+    )
+    parser.add_argument(
+        "datasets",
+        nargs="*",
+        choices=DATASET_SPECS.keys(),
+        help="Dataset keys to download. If omitted, all datasets are attempted.",
+    )
+    return parser.parse_args(argv)
+
+
+def is_gated_dataset_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return "gated dataset" in message or "authenticated to access" in message
+
+
+def run_downloads(selected=None):
+    requested = list(selected) if selected else list(DATASET_SPECS.keys())
+    summary = {"downloaded": [], "skipped": []}
+
+    print("Downloading Phase 1 datasets...")
+    for index, dataset_key in enumerate(requested, start=1):
+        spec = DATASET_SPECS[dataset_key]
+        print(f"  [{index}/{len(requested)}] {spec['label']}")
+        try:
+            spec["handler"]()
+        except DatasetNotFoundError as exc:
+            if dataset_key == "wildjailbreak" and is_gated_dataset_error(exc):
+                print("  WildJailbreak: skipped because the dataset is gated and requires authentication.")
+                print("  Set HF_TOKEN or run `huggingface-cli login`, then retry this dataset explicitly.")
+                summary["skipped"].append(dataset_key)
+                continue
+            raise
+        summary["downloaded"].append(dataset_key)
+
+    print("Done. Requested datasets processed.")
+    return summary
+
+
+def main(argv=None):
+    args = parse_args(argv)
+    run_downloads(args.datasets)
+
+
+if __name__ == "__main__":
+    main()

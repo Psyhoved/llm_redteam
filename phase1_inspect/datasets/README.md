@@ -1,10 +1,28 @@
 # Датасеты Phase 1
 
-Скачай все датасеты одной командой из директории `phase1_inspect/`:
+Команды ниже запускаются из директории `phase1_inspect/`.
 
-```bash
-python datasets/download_datasets.py
+Скачать только один датасет:
+
+```powershell
+python .\datasets\download_datasets.py advbench
 ```
+
+Скачать несколько конкретных датасетов:
+
+```powershell
+python .\datasets\download_datasets.py advbench xstest toxicchat
+```
+
+Попробовать скачать всё сразу:
+
+```powershell
+python .\datasets\download_datasets.py
+```
+
+Если Hugging Face dataset gated, как `wildjailbreak`, скрипт выведет предупреждение
+и продолжит скачивание остальных наборов. Чтобы скачать `wildjailbreak`, понадобится
+аутентификация в HF Hub (`HF_TOKEN` или `huggingface-cli login`).
 
 ## Описание датасетов
 

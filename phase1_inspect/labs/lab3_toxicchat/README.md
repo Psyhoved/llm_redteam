@@ -17,7 +17,7 @@
 
 1. Запусти на 50 примерах из test split:
    ```bash
-   inspect eval run.py --model openrouter/openai/gpt-4o-mini --limit 50
+   python -m inspect_ai eval run.py --model openrouter/openai/gpt-4o-mini --limit 50
    ```
 
 2. Сравни ASR между `toxicity=1` и `jailbreaking=1` группами (через inspect view → metadata).

@@ -27,7 +27,7 @@
 
 1. Запусти оценку:
    ```bash
-   inspect eval run.py --model openrouter/openai/gpt-4o-mini
+   python -m inspect_ai eval run.py --model openrouter/openai/gpt-4o-mini
    ```
 
 2. В отчёте найди примеры, где модель ошибочно отказала на safe промптах.

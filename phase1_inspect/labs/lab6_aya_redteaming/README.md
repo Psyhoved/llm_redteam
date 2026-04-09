@@ -15,12 +15,18 @@
 
 1. Запусти на английском (default):
    ```bash
-   inspect eval run.py --model openrouter/openai/gpt-4o-mini --limit 50
+   python -m inspect_ai eval run.py --model openrouter/openai/gpt-4o-mini --limit 50
    ```
 
 2. Запусти на другом языке:
+   ```powershell
+   $env:TARGET_LANG = "ru"
+   python -m inspect_ai eval run.py --model openrouter/openai/gpt-4o-mini --limit 50
+   ```
+
+   Для bash/zsh эквивалент:
    ```bash
-   TARGET_LANG=ru inspect eval run.py --model openrouter/openai/gpt-4o-mini --limit 50
+   TARGET_LANG=ru python -m inspect_ai eval run.py --model openrouter/openai/gpt-4o-mini --limit 50
    ```
 
 3. Сравни ASR между языками. Есть ли языки, на которых модель более уязвима?

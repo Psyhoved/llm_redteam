@@ -23,8 +23,8 @@
 ## Задание
 
 ```bash
-inspect eval run.py --model openrouter/openai/gpt-4o-mini --limit 100
-inspect view
+python -m inspect_ai eval run.py --model openrouter/openai/gpt-4o-mini --limit 100
+python -m inspect_ai view
 ```
 
 В отчёте разбей результаты по `data_type` через metadata фильтр в inspect view.
