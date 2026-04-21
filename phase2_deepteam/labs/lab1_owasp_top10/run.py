@@ -186,7 +186,7 @@ if __name__ == "__main__":
     if not api_key:
         raise SystemExit("Ошибка: OPENROUTER_API_KEY не задан в .env")
 
-    # Печатаем конфигурацию явно — студент должен видеть, что именно запускается
+    # Печатаем конфигурацию явно
     total_cases = args.attacks_per_type * 7  # 7 OWASP уязвимостей поддерживается
     print("=== DeepTeam: OWASP LLM Top-10 Red Teaming ===")
     print(f"Target   (тестируемая модель): {args.target_model}")

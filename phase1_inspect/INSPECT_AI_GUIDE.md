@@ -173,7 +173,7 @@ python -m inspect_ai eval run.py --model openrouter/meta-llama/llama-3.1-8b-inst
 - появляется дополнительная стоимость judge-модели;
 - у grader-модели тоже есть свои bias и ошибки.
 
-## Что лучше использовать студентам
+## Что лучше использовать для старта
 
 Для первых запусков удобнее начать с одного `--model`, чтобы понять механику.
 
@@ -220,6 +220,8 @@ from inspect_ai.scorer import model_graded_qa
 Из директории `phase1_inspect/`:
 
 ```powershell
+uv venv
+.\.venv\Scripts\Activate.ps1
 uv pip install -r .\requirements.txt
 if (-not (Test-Path ..\.env)) { Copy-Item ..\.env.example ..\.env }
 ```

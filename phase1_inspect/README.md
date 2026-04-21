@@ -37,9 +37,14 @@ cd .\phase1_inspect
 
 ## Установка
 
+`uv pip install` в `uv` работает с уже существующим виртуальным окружением, поэтому для первого запуска сначала создай `.venv` в `phase1_inspect/`.
+Так как дальше в инструкциях используется обычный `python`, сразу после этого активируй окружение.
+
 Для первой лабы достаточно скачать только `advbench`:
 
 ```powershell
+uv venv
+.\.venv\Scripts\Activate.ps1
 uv pip install -r .\requirements.txt
 if (-not (Test-Path ..\.env)) { Copy-Item ..\.env.example ..\.env }
 python .\datasets\download_datasets.py advbench

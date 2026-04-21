@@ -55,6 +55,8 @@ DeepTeam покрывает из коробки:
 ## Установка и запуск
 
 ```powershell
+uv venv
+.\.venv\Scripts\Activate.ps1
 uv pip install -r .\requirements.txt
 if (-not (Test-Path ..\.env)) { Copy-Item ..\.env.example ..\.env }
 cd .\labs\lab1_owasp_top10
