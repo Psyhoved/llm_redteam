@@ -76,7 +76,7 @@ def download_toxicchat():
 
 
 def download_wildjailbreak():
-    download_hf("allenai/wildjailbreak", "wildjailbreak")
+    download_hf("allenai/wildjailbreak", "wildjailbreak", config="eval")
 
 
 def download_do_not_answer():
@@ -95,7 +95,7 @@ DATASET_SPECS = OrderedDict(
         (
             "wildjailbreak",
             {
-                "label": "WildJailbreak (~1GB — this will take a while)",
+                "label": "WildJailbreak eval (~1GB gated download)",
                 "handler": download_wildjailbreak,
             },
         ),

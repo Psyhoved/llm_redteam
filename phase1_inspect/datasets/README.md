@@ -24,6 +24,10 @@ python .\datasets\download_datasets.py
 и продолжит скачивание остальных наборов. Чтобы скачать `wildjailbreak`, понадобится
 аутентификация в HF Hub (`HF_TOKEN` или `huggingface-cli login`).
 
+`wildjailbreak` скачивается как subset `eval` и сохраняется в `datasets/wildjailbreak/`.
+Если у тебя там уже лежит старый локальный вариант датасета, удали эту папку перед
+повторным скачиванием, иначе downloader пропустит её как уже существующую.
+
 ## Описание датасетов
 
 ### AdvBench
@@ -46,8 +50,9 @@ python .\datasets\download_datasets.py
 
 ### WildJailbreak
 - **Источник:** huggingface.co/datasets/allenai/wildjailbreak
-- **Размер:** 262K примеров (используем выборку по 100)
-- **Что тестирует:** Эффективность адверсариальных техник джейлбрейка vs. vanilla запросов
+- **Локально скачиваем:** subset `eval` (gated dataset)
+- **Размер eval:** ~2.2K примеров
+- **Что тестирует:** Пропускает ли модель harmful jailbreak-запросы и не переотказывает ли benign jailbreak-запросам
 - **Ключевые колонки:** `vanilla`, `adversarial`, `data_type`
 
 ### Do-Not-Answer

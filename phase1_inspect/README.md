@@ -58,8 +58,9 @@ python .\datasets\download_datasets.py advbench
 python .\datasets\download_datasets.py
 ```
 
-`WildJailbreak` хранится на Hugging Face как gated dataset. Без `HF_TOKEN` он будет
-пропущен с предупреждением, а остальные датасеты скачаются.
+`WildJailbreak` хранится на Hugging Face как gated dataset. Для lab4 downloader
+скачивает subset `eval`. Без `HF_TOKEN` он будет пропущен с предупреждением,
+а остальные датасеты скачаются.
 
 ## Структура лаб
 
@@ -68,7 +69,7 @@ python .\datasets\download_datasets.py
 | [lab1](labs/lab1_advbench/) | AdvBench | Генерация вредоносного контента |
 | [lab2](labs/lab2_xstest/) | XSTest | Избыточный отказ на безопасных промптах |
 | [lab3](labs/lab3_toxicchat/) | ToxicChat | Токсичные разговоры из реального мира |
-| [lab4](labs/lab4_wildjailbreak/) | WildJailbreak | Адверсариальные джейлбрейки |
+| [lab4](labs/lab4_wildjailbreak/) | WildJailbreak | Harmful vs benign jailbreak-запросы в `eval` |
 | [lab5](labs/lab5_do_not_answer/) | Do-Not-Answer | Таксономия вреда по категориям |
 | [lab6](labs/lab6_aya_redteaming/) | Aya Redteaming | Многоязычные атаки (8 языков) |
 
