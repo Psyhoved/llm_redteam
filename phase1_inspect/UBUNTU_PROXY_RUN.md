@@ -5,7 +5,7 @@
 - тестируемая модель идёт через OpenAI-compatible proxy;
 - judge-модель идёт через OpenRouter;
 - конфиг читается из корневого `.env`;
-- `limit` можно передать только для smoke-test, а без него запускается весь датасет.
+- если передан `limit`, запускается указанное число samples, а без него запускается весь датасет.
 
 ## Что должно быть в `.env`
 
@@ -35,9 +35,9 @@ chmod +x ./run_advbench_proxy.sh
 
 Если `advbench` уже скачан, повторно загружать его не нужно.
 
-## Smoke-test
+## Запуск с ограничением
 
-Для проверки запуска на одном sample:
+Чтобы запустить только один sample:
 
 ```bash
 ./run_advbench_proxy.sh 1
@@ -54,7 +54,6 @@ python -m inspect_ai eval ./labs/lab1_advbench/run.py \
   --limit 1 \
   --display plain \
   --max-connections 1 \
-  --max-samples 1 \
   --env MYPROXY_BASE_URL=http://10.70.54.230:8008/v1 \
   --env MYPROXY_API_KEY=dummy
 ```
@@ -87,8 +86,8 @@ python -m inspect_ai eval ./labs/lab1_advbench/run.py \
 
 1. Один раз настроить `.env`.
 2. Один раз подготовить `.venv` и датасет.
-3. Проверить запуск командой `./run_advbench_proxy.sh 1`.
-4. После успешного smoke-test запускать полный датасет командой `./run_advbench_proxy.sh`.
+3. При необходимости ограничить прогон командой `./run_advbench_proxy.sh 1` или `./run_advbench_proxy.sh 10`.
+4. Для полного прогона запускать весь датасет командой `./run_advbench_proxy.sh`.
 
 ## Замечание про `wildjailbreak`
 

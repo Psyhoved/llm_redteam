@@ -106,7 +106,6 @@ args=(
   --model-role "grader=$GRADER_MODEL"
   --display plain
   --max-connections 1
-  --max-samples 1
 )
 
 if [[ -n "$LIMIT" ]]; then
