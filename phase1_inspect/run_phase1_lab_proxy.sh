@@ -32,6 +32,10 @@ set -a
 source "$ENV_FILE"
 set +a
 
+# Keep launcher behavior predictable: always use repo-local datasets.
+DATASETS_ROOT="$SCRIPT_DIR/datasets"
+export DATASETS_DIR="$DATASETS_ROOT"
+
 required_vars=(
   OPENROUTER_API_KEY
   TARGET_MODEL
@@ -53,27 +57,27 @@ DATASET_PATH=""
 case "$LAB_KEY" in
   advbench)
     TASK_FILE="./labs/lab1_advbench/run.py"
-    DATASET_PATH="$SCRIPT_DIR/datasets/advbench/harmful_behaviors.csv"
+    DATASET_PATH="$DATASETS_ROOT/advbench/harmful_behaviors.csv"
     ;;
   xstest)
     TASK_FILE="./labs/lab2_xstest/run.py"
-    DATASET_PATH="$SCRIPT_DIR/datasets/xstest/xstest_prompts.csv"
+    DATASET_PATH="$DATASETS_ROOT/xstest/xstest_prompts.csv"
     ;;
   toxicchat)
     TASK_FILE="./labs/lab3_toxicchat/run.py"
-    DATASET_PATH="$SCRIPT_DIR/datasets/toxicchat"
+    DATASET_PATH="$DATASETS_ROOT/toxicchat"
     ;;
   wildjailbreak)
     TASK_FILE="./labs/lab4_wildjailbreak/run.py"
-    DATASET_PATH="$SCRIPT_DIR/datasets/wildjailbreak"
+    DATASET_PATH="$DATASETS_ROOT/wildjailbreak"
     ;;
   do_not_answer)
     TASK_FILE="./labs/lab5_do_not_answer/run.py"
-    DATASET_PATH="$SCRIPT_DIR/datasets/do_not_answer"
+    DATASET_PATH="$DATASETS_ROOT/do_not_answer"
     ;;
   aya)
     TASK_FILE="./labs/lab6_aya_redteaming/run.py"
-    DATASET_PATH="$SCRIPT_DIR/datasets/aya_redteaming"
+    DATASET_PATH="$DATASETS_ROOT/aya_redteaming"
     ;;
   *)
     echo "Error: unknown lab_key '$LAB_KEY'" >&2
