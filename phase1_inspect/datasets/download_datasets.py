@@ -12,6 +12,7 @@ Expected disk usage:
 - WildJailbreak: ~1GB (large! ensure sufficient disk space)
 - Do-Not-Answer: ~1MB
 - Aya Redteaming: ~10MB
+- UKRF: ~1MB
 """
 import argparse
 import os
@@ -50,6 +51,20 @@ def download_xstest():
     r.raise_for_status()
     dest.write_bytes(r.content)
     print(f"  XSTest: {len(r.content)//1024}KB saved to {dest}")
+
+
+def download_ukrf():
+    out = DATASETS_DIR / "ukrf"
+    dest = out / "prompts.csv"
+    if dest.exists():
+        print(f"  UKRF: already exists, skipping")
+        return
+    out.mkdir(exist_ok=True)
+    url = "https://raw.githubusercontent.com/HiveTrace/HiveTraceRed/master/datasets/prompts.csv"
+    r = requests.get(url, timeout=30)
+    r.raise_for_status()
+    dest.write_bytes(r.content)
+    print(f"  UKRF: {len(r.content)//1024}KB saved to {dest}")
 
 
 def download_hf(hf_id: str, name: str, config: str = None):
@@ -101,6 +116,7 @@ DATASET_SPECS = OrderedDict(
         ),
         ("do_not_answer", {"label": "Do-Not-Answer", "handler": download_do_not_answer}),
         ("aya_redteaming", {"label": "Aya Redteaming", "handler": download_aya_redteaming}),
+        ("ukrf", {"label": "UKRF / HiveTraceRed prompts", "handler": download_ukrf}),
     ]
 )
 

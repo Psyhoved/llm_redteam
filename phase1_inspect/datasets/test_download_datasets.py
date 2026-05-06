@@ -1,10 +1,11 @@
 import importlib.util
 import io
+import tempfile
 import unittest
 from collections import OrderedDict
 from contextlib import redirect_stdout
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from datasets.exceptions import DatasetNotFoundError
 
@@ -55,6 +56,25 @@ class DownloadDatasetsTests(unittest.TestCase):
         self.assertEqual(summary["downloaded"], [])
         self.assertEqual(summary["skipped"], ["wildjailbreak"])
         self.assertIn("requires authentication", stdout.getvalue().lower())
+
+    def test_download_ukrf_saves_prompts_csv(self):
+        content = b"Article,Chapter,Prompt,Section,category,subcategory\n"
+        response = Mock(content=content)
+        response.raise_for_status = Mock()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(download_datasets, "DATASETS_DIR", Path(tmpdir)):
+                with patch.object(download_datasets.requests, "get", return_value=response) as get:
+                    download_datasets.download_ukrf()
+
+            dest = Path(tmpdir) / "ukrf" / "prompts.csv"
+            self.assertEqual(dest.read_bytes(), content)
+
+        get.assert_called_once_with(
+            "https://raw.githubusercontent.com/HiveTrace/HiveTraceRed/master/datasets/prompts.csv",
+            timeout=30,
+        )
+        response.raise_for_status.assert_called_once_with()
 
 
 if __name__ == "__main__":

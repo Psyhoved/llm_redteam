@@ -8,6 +8,7 @@ phase1_inspect/datasets/toxicchat/
 phase1_inspect/datasets/wildjailbreak/
 phase1_inspect/datasets/do_not_answer/
 phase1_inspect/datasets/aya_redteaming/
+phase1_inspect/datasets/ukrf/
 
 # Student reports (generated during labs)
 phase1_inspect/reports/*

@@ -13,7 +13,7 @@ AYA_LANG="${3:-}"
 
 if [[ -z "$LAB_KEY" ]]; then
   echo "Usage: ./run_phase1_lab_proxy.sh <lab_key> [limit] [aya_lang]" >&2
-  echo "Lab keys: advbench, xstest, toxicchat, wildjailbreak, do_not_answer, aya" >&2
+  echo "Lab keys: advbench, xstest, toxicchat, wildjailbreak, do_not_answer, aya, ukrf" >&2
   exit 1
 fi
 
@@ -78,6 +78,10 @@ case "$LAB_KEY" in
   aya)
     TASK_FILE="./labs/lab6_aya_redteaming/run.py"
     DATASET_PATH="$DATASETS_ROOT/aya_redteaming"
+    ;;
+  ukrf)
+    TASK_FILE="./labs/lab7_ukrf/run.py"
+    DATASET_PATH="$DATASETS_ROOT/ukrf/prompts.csv"
     ;;
   *)
     echo "Error: unknown lab_key '$LAB_KEY'" >&2
