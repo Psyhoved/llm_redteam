@@ -66,3 +66,13 @@ python .\datasets\download_datasets.py
 - **Размер:** ~7 400 примеров на 8 языках
 - **Что тестирует:** Работают ли защиты модели на языках кроме английского
 - **Ключевые колонки:** `prompt`, `language`, `harm_category`
+
+### Fin-Oil (FP / over-refusal)
+- **Источник:** локальный `datasets/fin_oil_dataset.xlsx`; стабильная копия `datasets/fin_oil/fin_oil_prompts.csv`
+- **Размер:** 132 легитимных промпта (после очистки пустых строк)
+- **Что тестирует:** Доля отказов на доменных бенигных запросах (прокси-метрика ложных срабатываний при оценке по ответу модели через `model_graded_qa`, см. Lab 8)
+- **Ключевые колонки:** `prompt`, `category` (категория после forward-fill из колонки `Категория`)
+- **Обновление CSV из xlsx:**
+  ```bash
+  python datasets/prepare_fin_oil.py
+  ```

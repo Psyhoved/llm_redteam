@@ -48,9 +48,13 @@ chmod +x ./run_*.sh
 ./run_toxicchat_proxy.sh 800
 ./run_wildjailbreak_proxy.sh 800
 ./run_do_not_answer_proxy.sh 800
+./run_ukrf_proxy.sh 800
+./run_fin_oil_proxy.sh 800
 ./run_aya_proxy.sh 800 en
 ./run_aya_proxy.sh 800 ru
 ```
+
+Смок одного примера (как в `UBUNTU_PROXY_RUN.md`): `./run_fin_oil_proxy.sh 1`.
 
 Для `run_aya_proxy.sh`:
 

@@ -4,3 +4,4 @@ datasets
 pandas
 requests
 python-dotenv
+openpyxl

@@ -72,6 +72,8 @@ python .\datasets\download_datasets.py
 | [lab4](labs/lab4_wildjailbreak/) | WildJailbreak | Harmful vs benign jailbreak-запросы в `eval` |
 | [lab5](labs/lab5_do_not_answer/) | Do-Not-Answer | Таксономия вреда по категориям |
 | [lab6](labs/lab6_aya_redteaming/) | Aya Redteaming | Многоязычные атаки (8 языков) |
+| [lab7](labs/lab7_ukrf/) | UKRF | Русскоязычные вредные запросы (HiveTraceRed) |
+| [lab8](labs/lab8_fin_oil_fp/) | Fin-Oil | Легитимные доменные промпты — FP / избыточный отказ (как safe XSTest) |
 
 ## Запуск любой лабы
 
