@@ -31,9 +31,9 @@
 
 | Роль | Параметр `red_team()` | CLI-флаг | По умолчанию |
 |------|-----------------------|----------|--------------|
-| **Target** — тестируемая модель | `model_callback` | `--target-model` | `OPENROUTER_MODEL` из .env |
-| **Attacker** — генерирует атаки | `simulator_model` | `--attacker-model` | `ATTACKER_MODEL` из .env |
-| **Judge** — оценивает ответы | `evaluation_model` | `--judge-model` | `JUDGE_MODEL` из .env |
+| **Target** — тестируемая модель | `model_callback` | `--target-model` | `OPENROUTER_MODEL` или `TARGET_MODEL` из .env |
+| **Attacker** — генерирует атаки | `simulator_model` | `--attacker-model` | `ATTACKER_MODEL`, затем `OPENROUTER_MODEL` |
+| **Judge** — оценивает ответы | `evaluation_model` | `--judge-model` | `JUDGE_MODEL`, затем `GRADER_MODEL` |
 
 **О стоимости:** каждый тест-кейс = минимум 3 LLM-вызова (один в каждую роль).
 При 7 уязвимостях × 5 атак = 35 тест-кейсов → ~105+ вызовов суммарно.
@@ -52,32 +52,61 @@ DeepTeam покрывает из коробки:
 
 *Не покрыты (требуют инфраструктурный доступ):* LLM03 (Supply Chain), LLM04 (Data and Model Poisoning), LLM08 (Vector and Embedding Weaknesses)
 
-## Установка и запуск
+## Установка и запуск на Ubuntu
 
-```powershell
-uv venv
-.\.venv\Scripts\Activate.ps1
-uv pip install -r .\requirements.txt
-if (-not (Test-Path ..\.env)) { Copy-Item ..\.env.example ..\.env }
-cd .\labs\lab1_owasp_top10
+```bash
+cd ~/llm_redteam/phase2_deepteam
+python3 -m venv .venv
+./.venv/bin/python -m pip install -r requirements.txt
+chmod +x ./run_owasp_top10_proxy.sh
+chmod +x ./run_owasp_top10_smoke_proxy.sh
 ```
 
 **Быстрая проверка** — убедиться что всё работает, не сжигая токены:
 ```bash
-python run.py --attacks-per-type 1
+./run_owasp_top10_smoke_proxy.sh
 ```
 
-**Полный запуск** с явным указанием всех трёх ролей:
+Smoke-runner запускает один минимальный test case: `--smoke-one --attacks-per-type 1 --max-concurrent 1`.
+Ожидаемый результат: таблица/лог DeepTeam в консоли и JSON-отчёт в `phase2_deepteam/reports/`.
+
+**Боевой запуск через runner**:
 ```bash
-python run.py \
-    --target-model   openai/gpt-4o-mini \
-    --attacker-model openai/gpt-4o-mini \
-    --judge-model    openai/gpt-4o-mini \
-    --attacks-per-type 5 \
-    --purpose "customer support chatbot"
+./run_owasp_top10_proxy.sh 1 1
+./run_owasp_top10_proxy.sh 5 2 "customer support chatbot"
+```
+
+Аргументы runner:
+
+- `1` / `5` — атак на каждый DeepTeam vulnerability type
+- `1` / `2` — максимум параллельных запросов
+- третий аргумент — необязательный `purpose`
+- четвёртый аргумент или `OWASP_CATEGORIES` — необязательный список категорий, например `LLM_01,LLM_02`
+
+Пример запуска только двух OWASP-категорий:
+
+```bash
+./run_owasp_top10_proxy.sh 1 1 "" "LLM_01,LLM_02"
 ```
 
 **Справка по параметрам:**
 ```bash
-python run.py --help
+./.venv/bin/python ./labs/lab1_owasp_top10/run.py --help
 ```
+
+## Совместимость с Phase 1 proxy
+
+Runner читает `../.env` и может переиспользовать переменные из Phase 1:
+
+```dotenv
+OPENROUTER_API_KEY=...
+TARGET_MODEL=openai-api/myproxy/AlphaGaO/Qwen3-14B-GPTQ
+GRADER_MODEL=openrouter/inclusionai/ling-2.6-flash:free
+MYPROXY_BASE_URL=http://10.70.54.230:8008/v1
+MYPROXY_API_KEY=dummy
+```
+
+Если задан `OPENROUTER_MODEL`, Target пойдёт через OpenRouter. Если `OPENROUTER_MODEL`
+не задан, но есть `TARGET_MODEL` и `MYPROXY_BASE_URL`, Target будет вызван через proxy,
+а Attacker/Judge останутся на OpenRouter. Для явного управления используй
+`TARGET_BASE_URL`, `TARGET_API_KEY`, `ATTACKER_BASE_URL`, `JUDGE_BASE_URL`.

@@ -19,10 +19,11 @@
 Перед полным прогоном убедись, что всё настроено правильно, потратив минимум токенов:
 
 ```bash
-python run.py --attacks-per-type 1
+cd ../../
+./run_owasp_top10_smoke_proxy.sh
 ```
 
-Это запустит **1 атаку на каждую из 7 уязвимостей** (~21 LLM-вызов суммарно).
+Это запустит **1 baseline test case** без разворачивания полного OWASP.
 Если видишь таблицу с результатами и JSON-отчёт — всё работает.
 
 ## Задание
@@ -31,7 +32,8 @@ python run.py --attacks-per-type 1
 
 2. **Полный тест** (займёт 5–15 минут):
    ```bash
-   python run.py --attacks-per-type 5
+   cd ../../
+   ./run_owasp_top10_proxy.sh 5 2
    ```
 
 3. Открой JSON-отчёт в `../../reports/` и найди:
@@ -66,12 +68,15 @@ ATTACKER ──[attack prompt]──▶ TARGET ──[response]──▶ JUDGE �
 ## Параметры запуска
 
 ```
---target-model    MODEL   Target: тестируемая модель (default: OPENROUTER_MODEL из .env)
---attacker-model  MODEL   Attacker: генерирует атаки  (default: ATTACKER_MODEL из .env)
---judge-model     MODEL   Judge: оценивает ответы     (default: JUDGE_MODEL из .env)
---attacks-per-type  N     Атак на уязвимость, итого N×7 кейсов  (default: 5)
---max-concurrent    N     Параллельных запросов (снизь до 2-3 при rate-limit) (default: 10)
---purpose         TEXT    Описание тестируемой системы для прицельных атак
+--target-model      MODEL   Target: тестируемая модель (default: OPENROUTER_MODEL или TARGET_MODEL)
+--attacker-model    MODEL   Attacker: генерирует атаки  (default: ATTACKER_MODEL)
+--judge-model       MODEL   Judge: оценивает ответы     (default: JUDGE_MODEL или GRADER_MODEL)
+--target-base-url   URL     endpoint для Target
+--attacker-base-url URL     endpoint для Attacker
+--judge-base-url    URL     endpoint для Judge
+--attacks-per-type  N       Атак на уязвимость, итого N×7 кейсов  (default: 5)
+--max-concurrent    N       Параллельных запросов (снизь до 1-3 при rate-limit) (default: 10)
+--purpose           TEXT    Описание тестируемой системы для прицельных атак
 ```
 
 Полная справка: `python run.py --help`
