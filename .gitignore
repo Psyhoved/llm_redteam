@@ -24,5 +24,6 @@ logs/
 __pycache__/
 *.pyc
 .venv/
+.deepeval/
 claude.md
 docs/
