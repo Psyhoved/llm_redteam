@@ -51,6 +51,12 @@ for var_name in "${required_vars[@]}"; do
   fi
 done
 
+PHASE1_MAX_CONNECTIONS="${PHASE1_MAX_CONNECTIONS:-1}"
+if ! [[ "$PHASE1_MAX_CONNECTIONS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "Error: PHASE1_MAX_CONNECTIONS must be a positive integer (got '$PHASE1_MAX_CONNECTIONS')" >&2
+  exit 1
+fi
+
 TASK_FILE=""
 DATASET_PATH=""
 
@@ -117,7 +123,7 @@ args=(
   --model "$TARGET_MODEL"
   --model-role "grader=$GRADER_MODEL"
   --display plain
-  --max-connections 1
+  --max-connections "$PHASE1_MAX_CONNECTIONS"
 )
 
 if [[ -n "$LIMIT" ]]; then
