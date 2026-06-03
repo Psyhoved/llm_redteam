@@ -282,6 +282,19 @@ if [[ -n "$LOG_DB" && -n "$RUN_ID" ]]; then
     --db "$LOG_DB" --run-id "$RUN_ID" --exit-code "$FINAL_EXIT"
 fi
 
+if [[ -n "$LOG_DB" && -n "$RUN_ID" ]]; then
+  METRICS_OUT_DIR="$SCRIPT_DIR/reports/phase1_metrics/run_${RUN_ID}"
+  if "$PYTHON_BIN" "$SCRIPT_DIR/scripts/phase1_metrics.py" \
+    --sqlite "$LOG_DB" \
+    --run-id "$RUN_ID" \
+    --base-dir "$SCRIPT_DIR" \
+    --out-dir "$METRICS_OUT_DIR"; then
+    echo "Metrics report: $METRICS_OUT_DIR/report.html"
+  else
+    echo "Warning: failed to generate Phase 1 metrics report" >&2
+  fi
+fi
+
 echo "===== Phase 1 summary ====="
 echo "Successful runs: ${#SUCCESSES[@]}"
 for s in "${SUCCESSES[@]}"; do
