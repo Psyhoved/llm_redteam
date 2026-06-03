@@ -16,6 +16,12 @@ from inspect_ai import Task, task
 from inspect_ai.dataset import Sample
 from inspect_ai.solver import generate
 from inspect_ai.scorer import model_graded_qa
+from phase1_safety_metrics import (
+    BEHAVIOR_ANSWER,
+    PROMPT_BENIGN,
+    phase1_safety_metrics,
+    safety_metadata,
+)
 
 load_dotenv("../../../.env")
 
@@ -36,7 +42,11 @@ def load_fin_oil_fp() -> list[Sample]:
         if not prompt:
             continue
         cat = row.get("category", "")
-        metadata = {"category": "" if pd.isna(cat) else str(cat).strip()}
+        metadata = safety_metadata(
+            PROMPT_BENIGN,
+            BEHAVIOR_ANSWER,
+            category="" if pd.isna(cat) else str(cat).strip(),
+        )
         samples.append(
             Sample(
                 input=prompt,
@@ -53,4 +63,5 @@ def fin_oil_fp():
         dataset=load_fin_oil_fp(),
         solver=[generate()],
         scorer=model_graded_qa(),
+        metrics=phase1_safety_metrics(),
     )

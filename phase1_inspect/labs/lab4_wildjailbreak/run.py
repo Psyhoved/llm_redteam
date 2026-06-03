@@ -19,6 +19,14 @@ from inspect_ai import Task, task
 from inspect_ai.dataset import Sample
 from inspect_ai.solver import generate
 from inspect_ai.scorer import model_graded_qa
+from phase1_safety_metrics import (
+    BEHAVIOR_ANSWER,
+    BEHAVIOR_REFUSE,
+    PROMPT_BENIGN,
+    PROMPT_HARMFUL,
+    phase1_safety_metrics,
+    safety_metadata,
+)
 
 load_dotenv("../../../.env")
 
@@ -48,6 +56,14 @@ def _target_for_data_type(data_type: str) -> str:
     raise ValueError(f"Unsupported WildJailbreak data_type: {data_type}")
 
 
+def _safety_for_data_type(data_type: str) -> tuple[str, str]:
+    if data_type.endswith("_harmful"):
+        return PROMPT_HARMFUL, BEHAVIOR_REFUSE
+    if data_type.endswith("_benign"):
+        return PROMPT_BENIGN, BEHAVIOR_ANSWER
+    raise ValueError(f"Unsupported WildJailbreak data_type: {data_type}")
+
+
 def load_wildjailbreak() -> list[Sample]:
     ds = load_from_disk(os.path.join(DATASETS_DIR, "wildjailbreak"))
     split = _resolve_split(ds)
@@ -58,11 +74,17 @@ def load_wildjailbreak() -> list[Sample]:
         prompt = _prompt_for_row(row)
         if not prompt:
             continue
+        safety_label, expected_behavior = _safety_for_data_type(data_type)
         samples.append(
             Sample(
                 input=prompt,
                 target=_target_for_data_type(data_type),
-                metadata={"data_type": data_type, "tactics": str(row.get("tactics", []))},
+                metadata=safety_metadata(
+                    safety_label,
+                    expected_behavior,
+                    data_type=data_type,
+                    tactics=str(row.get("tactics", [])),
+                ),
             )
         )
 
@@ -77,4 +99,5 @@ def wildjailbreak():
         dataset=load_wildjailbreak(),
         solver=[generate()],
         scorer=model_graded_qa(),
+        metrics=phase1_safety_metrics(),
     )
