@@ -13,6 +13,7 @@ Expected disk usage:
 - Do-Not-Answer: ~1MB
 - Aya Redteaming: ~10MB
 - UKRF: ~1MB
+- PII-Bench: ~200KB
 """
 import argparse
 import os
@@ -102,6 +103,10 @@ def download_aya_redteaming():
     download_hf("CohereLabs/aya_redteaming", "aya_redteaming")
 
 
+def download_pii_bench():
+    download_hf("hivetrace/pii-bench", "pii_bench")
+
+
 DATASET_SPECS = OrderedDict(
     [
         ("advbench", {"label": "AdvBench", "handler": download_advbench}),
@@ -117,6 +122,7 @@ DATASET_SPECS = OrderedDict(
         ("do_not_answer", {"label": "Do-Not-Answer", "handler": download_do_not_answer}),
         ("aya_redteaming", {"label": "Aya Redteaming", "handler": download_aya_redteaming}),
         ("ukrf", {"label": "UKRF / HiveTraceRed prompts", "handler": download_ukrf}),
+        ("pii_bench", {"label": "PII-Bench (hivetrace/pii-bench)", "handler": download_pii_bench}),
     ]
 )
 

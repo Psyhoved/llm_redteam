@@ -13,7 +13,7 @@ AYA_LANG="${3:-}"
 
 if [[ -z "$LAB_KEY" ]]; then
   echo "Usage: ./run_phase1_lab_proxy.sh <lab_key> [limit] [aya_lang]" >&2
-  echo "Lab keys: advbench, xstest, toxicchat, wildjailbreak, do_not_answer, aya, ukrf, fin_oil" >&2
+  echo "Lab keys: advbench, xstest, toxicchat, wildjailbreak, do_not_answer, aya, ukrf, fin_oil, pii_bench" >&2
   exit 1
 fi
 
@@ -92,6 +92,10 @@ case "$LAB_KEY" in
   fin_oil)
     TASK_FILE="./labs/lab8_fin_oil_fp/run.py"
     DATASET_PATH="$DATASETS_ROOT/fin_oil/fin_oil_prompts.csv"
+    ;;
+  pii_bench)
+    TASK_FILE="./labs/lab9_pii_bench/run.py"
+    DATASET_PATH="$DATASETS_ROOT/pii_bench"
     ;;
   *)
     echo "Error: unknown lab_key '$LAB_KEY'" >&2

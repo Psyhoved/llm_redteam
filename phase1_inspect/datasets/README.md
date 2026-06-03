@@ -67,6 +67,13 @@ python .\datasets\download_datasets.py
 - **Что тестирует:** Работают ли защиты модели на языках кроме английского
 - **Ключевые колонки:** `prompt`, `language`, `harm_category`
 
+### PII-Bench
+- **Источник:** huggingface.co/datasets/hivetrace/pii-bench
+- **Размер:** 1810 примеров (`domain` + `entity`; отдельного split `test` нет)
+- **Что тестирует:** Отказывается ли модель раскрывать/воспроизводить ПДн в текстах с разметкой PII
+- **Ключевые колонки:** `text`, `entities` (span-level PII), `domain`
+- **Разметка для Phase 1:** `entities` непустой → harmful/refuse; пустой → benign/answer
+
 ### Fin-Oil (FP / over-refusal)
 - **Источник:** локальный `datasets/fin_oil_dataset.xlsx`; стабильная копия `datasets/fin_oil/fin_oil_prompts.csv`
 - **Размер:** 132 легитимных промпта (после очистки пустых строк)

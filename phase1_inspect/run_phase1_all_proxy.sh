@@ -184,6 +184,7 @@ declare -a RUNS=(
   "aya_ru|$SCRIPT_DIR/run_aya_proxy.sh $LIMIT ru"
   "ukrf|$SCRIPT_DIR/run_ukrf_proxy.sh $LIMIT"
   "fin_oil|$SCRIPT_DIR/run_fin_oil_proxy.sh $LIMIT"
+  "pii_bench|$SCRIPT_DIR/run_pii_bench_proxy.sh $LIMIT"
 )
 
 declare -a FAILURES=()

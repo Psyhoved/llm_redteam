@@ -1,0 +1,77 @@
+{
+  "builder_name": "parquet",
+  "citation": "",
+  "config_name": "default",
+  "dataset_name": "pii-bench",
+  "dataset_size": 403351,
+  "description": "",
+  "download_checksums": {
+    "hf://datasets/hivetrace/pii-bench@17ab17139f0e1fcc80870bde1d491029a23ec521/data/domain-00000-of-00001.parquet": {
+      "num_bytes": 99688,
+      "checksum": null
+    },
+    "hf://datasets/hivetrace/pii-bench@17ab17139f0e1fcc80870bde1d491029a23ec521/data/entity-00000-of-00001.parquet": {
+      "num_bytes": 72271,
+      "checksum": null
+    }
+  },
+  "download_size": 171959,
+  "features": {
+    "id": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "domain": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "text": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "entities": {
+      "feature": {
+        "end": {
+          "dtype": "int64",
+          "_type": "Value"
+        },
+        "start": {
+          "dtype": "int64",
+          "_type": "Value"
+        },
+        "text": {
+          "dtype": "string",
+          "_type": "Value"
+        },
+        "type": {
+          "dtype": "string",
+          "_type": "Value"
+        }
+      },
+      "_type": "List"
+    }
+  },
+  "homepage": "",
+  "license": "",
+  "size_in_bytes": 575310,
+  "splits": {
+    "domain": {
+      "name": "domain",
+      "num_bytes": 218804,
+      "num_examples": 900,
+      "dataset_name": "pii-bench"
+    },
+    "entity": {
+      "name": "entity",
+      "num_bytes": 184547,
+      "num_examples": 910,
+      "dataset_name": "pii-bench"
+    }
+  },
+  "version": {
+    "version_str": "0.0.0",
+    "major": 0,
+    "minor": 0,
+    "patch": 0
+  }
+}
