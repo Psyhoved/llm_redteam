@@ -19,6 +19,7 @@ DISABLE_LOG_DB=false
 DEFAULT_LOG_DB_REL="logs/phase1_runs.sqlite"
 RUN_ID=""
 SCREEN_SESSION="${PHASE1_SCREEN_SESSION:-}"
+LABS_FILTER=""
 
 FULL_ARGV_JSON="[]"
 if [[ -n "$PYTHON_BIN" ]] && command -v -- "$PYTHON_BIN" >/dev/null 2>&1; then
@@ -36,11 +37,15 @@ Usage: ./run_phase1_all_proxy.sh [limit] [options]
   --no-log-db                 Disable SQLite logging (by default logs are written).
   --log-db PATH               Override default SQLite path (normally you do not need this).
   --sleep-before SECONDS      Optional extra sleep in seconds AFTER the MSK wait (rare/debug only).
+  --labs LIST                 Comma-separated lab keys to run (default: all).
+                              Keys: advbench,xstest,toxicchat,wildjailbreak,do_not_answer,
+                              aya_en,aya_ru,ukrf,fin_oil,pii_bench
 
 Examples:
   ./run_phase1_all_proxy.sh 2 -a "2026-05-15 03:00:00"
   ./run_phase1_all_proxy.sh 50 --at-moscow "2026-05-11 03:00:00"
   ./run_phase1_all_proxy.sh 200 -a "tomorrow 09:30"
+  ./run_phase1_all_proxy.sh 50 --labs advbench,xstest,fin_oil
 
 Model / proxy / judge API (TARGET_MODEL, GRADER_MODEL, MYPROXY_*, OPENROUTER_API_KEY, etc.):
   Set in the repo root .env (see run_phase1_lab_proxy.sh and run_*_proxy.sh). No need to pass them on this command line.
@@ -82,6 +87,53 @@ json_field() {
   "$PYTHON_BIN" -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get(sys.argv[2], ""))' "$json_file" "$field"
 }
 
+VALID_LAB_KEYS=(
+  advbench xstest toxicchat wildjailbreak do_not_answer
+  aya_en aya_ru ukrf fin_oil pii_bench
+)
+
+validate_labs_filter() {
+  local key
+  local -a requested=()
+  local -a invalid=()
+  IFS=',' read -ra requested <<<"$LABS_FILTER"
+  for key in "${requested[@]}"; do
+    key="${key// /}"
+    [[ -z "$key" ]] && continue
+    local found=0
+    for valid in "${VALID_LAB_KEYS[@]}"; do
+      if [[ "$key" == "$valid" ]]; then
+        found=1
+        break
+      fi
+    done
+    if [[ $found -eq 0 ]]; then
+      invalid+=("$key")
+    fi
+  done
+  if [[ ${#invalid[@]} -gt 0 ]]; then
+    echo "Error: unknown lab key(s): ${invalid[*]}" >&2
+    echo "Valid keys: ${VALID_LAB_KEYS[*]}" >&2
+    exit 1
+  fi
+  if [[ ${#requested[@]} -eq 0 ]]; then
+    echo "Error: --labs requires at least one lab key" >&2
+    exit 1
+  fi
+}
+
+lab_in_filter() {
+  local name="$1"
+  [[ -z "$LABS_FILTER" ]] && return 0
+  local key
+  IFS=',' read -ra keys <<<"$LABS_FILTER"
+  for key in "${keys[@]}"; do
+    key="${key// /}"
+    [[ "$key" == "$name" ]] && return 0
+  done
+  return 1
+}
+
 while (($#)); do
   case "$1" in
     --at-moscow | -a)
@@ -100,6 +152,10 @@ while (($#)); do
       DISABLE_LOG_DB=true
       shift
       ;;
+    --labs)
+      if [[ ${2+x} ]]; then LABS_FILTER="$2"; else echo "Error: missing value after --labs" >&2; usage 2; fi
+      shift 2
+      ;;
     -h | --help)
       usage 0
       ;;
@@ -114,6 +170,10 @@ while (($#)); do
       ;;
   esac
 done
+
+if [[ -n "$LABS_FILTER" ]]; then
+  validate_labs_filter
+fi
 
 if [[ -n "$AT_MOSCOW" ]]; then
   sleep_until_moscow "$AT_MOSCOW"
@@ -204,12 +264,21 @@ fi
 if [[ -n "$LOG_DB" ]]; then
   echo "SQLite log DB: $LOG_DB (run_id=$RUN_ID)"
 fi
+if [[ -n "$LABS_FILTER" ]]; then
+  echo "Lab filter: $LABS_FILTER"
+fi
 echo "Failure policy: continue-and-report — one failing lab (e.g. wildjailbreak without data) does not stop the remaining labs."
 echo
 
 for run_spec in "${RUNS[@]}"; do
   name="${run_spec%%|*}"
   cmd="${run_spec#*|}"
+
+  if ! lab_in_filter "$name"; then
+    echo "=== SKIP: $name (not in --labs filter) ==="
+    echo
+    continue
+  fi
 
   echo "=== RUN: $name ==="
   echo "Command: $cmd"
