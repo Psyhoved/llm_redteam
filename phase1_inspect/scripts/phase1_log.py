@@ -117,6 +117,177 @@ def cmd_finish_run(args: argparse.Namespace) -> None:
     conn.close()
 
 
+def run_status_label(
+    finished_at: str | None, orchestrator_exit: int | None, lab_count: int, success_count: int
+) -> str:
+    if finished_at is None:
+        return "running"
+    if orchestrator_exit == 0:
+        return "ok"
+    if success_count > 0:
+        return "partial_fail"
+    return "failed"
+
+
+def cmd_list_runs(args: argparse.Namespace) -> None:
+    conn = connect(Path(args.db))
+    ensure_schema(conn)
+    limit = args.limit if args.limit is not None else 50
+    rows = conn.execute(
+        """
+        SELECT
+          r.id,
+          r.started_at,
+          r.finished_at,
+          r.limit_val,
+          r.orchestrator_exit,
+          r.screen_session,
+          r.hostname,
+          r.at_moscow,
+          COUNT(l.id) AS lab_count,
+          SUM(CASE WHEN l.exit_code = 0 THEN 1 ELSE 0 END) AS success_count
+        FROM runs r
+        LEFT JOIN lab_runs l ON l.run_id = r.id
+        GROUP BY r.id
+        ORDER BY r.id DESC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+    payload = []
+    for row in rows:
+        (
+            run_id,
+            started_at,
+            finished_at,
+            limit_val,
+            orchestrator_exit,
+            screen_session,
+            hostname,
+            at_moscow,
+            lab_count,
+            success_count,
+        ) = row
+        payload.append(
+            {
+                "id": run_id,
+                "started_at": started_at,
+                "finished_at": finished_at,
+                "limit_val": limit_val,
+                "orchestrator_exit": orchestrator_exit,
+                "screen_session": screen_session,
+                "hostname": hostname,
+                "at_moscow": at_moscow,
+                "lab_count": lab_count or 0,
+                "success_count": success_count or 0,
+                "status": run_status_label(
+                    finished_at, orchestrator_exit, lab_count or 0, success_count or 0
+                ),
+            }
+        )
+    conn.close()
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+
+
+def cmd_get_run(args: argparse.Namespace) -> None:
+    conn = connect(Path(args.db))
+    ensure_schema(conn)
+    row = conn.execute(
+        """
+        SELECT
+          id, started_at, finished_at, hostname, limit_val, at_moscow,
+          sleep_before_sec, argv, orchestrator_exit, screen_session
+        FROM runs WHERE id = ?
+        """,
+        (args.run_id,),
+    ).fetchone()
+    if row is None:
+        print(json.dumps({"error": f"run_id {args.run_id} not found"}), file=sys.stderr)
+        conn.close()
+        sys.exit(1)
+
+    (
+        run_id,
+        started_at,
+        finished_at,
+        hostname,
+        limit_val,
+        at_moscow,
+        sleep_before_sec,
+        argv,
+        orchestrator_exit,
+        screen_session,
+    ) = row
+
+    lab_rows = conn.execute(
+        """
+        SELECT
+          lab_name, started_at, finished_at, exit_code, raw_exit_code,
+          status, reason, eval_log
+        FROM lab_runs
+        WHERE run_id = ?
+        ORDER BY id
+        """,
+        (run_id,),
+    ).fetchall()
+    conn.close()
+
+    lab_runs = [
+        {
+            "lab_name": lr[0],
+            "started_at": lr[1],
+            "finished_at": lr[2],
+            "exit_code": lr[3],
+            "raw_exit_code": lr[4],
+            "status": lr[5],
+            "reason": lr[6],
+            "eval_log": lr[7],
+        }
+        for lr in lab_rows
+    ]
+    success_count = sum(1 for lr in lab_runs if lr["exit_code"] == 0)
+    payload = {
+        "run": {
+            "id": run_id,
+            "started_at": started_at,
+            "finished_at": finished_at,
+            "hostname": hostname,
+            "limit_val": limit_val,
+            "at_moscow": at_moscow,
+            "sleep_before_sec": sleep_before_sec,
+            "argv": json.loads(argv) if argv else [],
+            "orchestrator_exit": orchestrator_exit,
+            "screen_session": screen_session,
+            "lab_count": len(lab_runs),
+            "success_count": success_count,
+            "status": run_status_label(
+                finished_at, orchestrator_exit, len(lab_runs), success_count
+            ),
+        },
+        "lab_runs": lab_runs,
+    }
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+
+
+def cmd_find_run_by_session(args: argparse.Namespace) -> None:
+    conn = connect(Path(args.db))
+    ensure_schema(conn)
+    row = conn.execute(
+        """
+        SELECT id FROM runs
+        WHERE screen_session = ?
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (args.screen_session,),
+    ).fetchone()
+    conn.close()
+    if row is None:
+        print("")
+    else:
+        print(row[0])
+
+
 def cmd_insert_lab(args: argparse.Namespace) -> None:
     conn = connect(Path(args.db))
     ensure_schema(conn)
@@ -182,6 +353,23 @@ def main() -> None:
     p_lab.add_argument("--stdout-file", required=True)
     p_lab.add_argument("--stderr-file", required=True)
     p_lab.set_defaults(func=cmd_insert_lab)
+
+    p_list = sub.add_parser("list-runs", help="List runs as JSON")
+    p_list.add_argument("--db", required=True)
+    p_list.add_argument("--limit", type=int, default=50)
+    p_list.set_defaults(func=cmd_list_runs)
+
+    p_get = sub.add_parser("get-run", help="Get one run with lab_runs as JSON")
+    p_get.add_argument("--db", required=True)
+    p_get.add_argument("--run-id", type=int, required=True)
+    p_get.set_defaults(func=cmd_get_run)
+
+    p_find = sub.add_parser(
+        "find-run-by-session", help="Print run id for screen_session or empty"
+    )
+    p_find.add_argument("--db", required=True)
+    p_find.add_argument("--screen-session", required=True)
+    p_find.set_defaults(func=cmd_find_run_by_session)
 
     args = parser.parse_args()
     args.func(args)
