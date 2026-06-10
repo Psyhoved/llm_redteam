@@ -1,0 +1,239 @@
+"""Launch Phase 1 orchestrator runs inside detached screen sessions."""
+
+from __future__ import annotations
+
+import json
+import re
+import shutil
+import subprocess
+import time
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+from admin.config import (
+    LAUNCH_META_DIR,
+    LOGS_DIR,
+    PHASE1_DIR,
+    VALID_LAB_KEYS,
+)
+
+
+@dataclass
+class LaunchRequest:
+    limit: int
+    labs: list[str] | None  # None = all labs
+    at_moscow: str | None
+    screen_session: str
+    target_model: str | None
+    grader_model: str | None
+    max_connections: int | None
+
+
+@dataclass
+class LaunchResult:
+    screen_session: str
+    screen_log: str | None
+    orchestrator_args: list[str]
+    meta_path: str
+
+
+class LaunchError(Exception):
+    pass
+
+
+def _iso_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _sanitize_session(name: str) -> str:
+    cleaned = re.sub(r"[^a-zA-Z0-9_.-]", "_", name.strip())
+    if not cleaned:
+        raise LaunchError("screen session name is empty after sanitization")
+    return cleaned[:64]
+
+
+def default_session_name() -> str:
+    return f"phase1_{int(time.time())}"
+
+
+def validate_launch(req: LaunchRequest) -> None:
+    if req.limit < 1:
+        raise LaunchError("limit must be at least 1")
+    if req.labs is not None:
+        if not req.labs:
+            raise LaunchError("select at least one lab")
+        unknown = [k for k in req.labs if k not in VALID_LAB_KEYS]
+        if unknown:
+            raise LaunchError(f"unknown lab keys: {', '.join(unknown)}")
+    if req.max_connections is not None and req.max_connections < 1:
+        raise LaunchError("max_connections must be at least 1")
+    req.screen_session = _sanitize_session(req.screen_session)
+
+
+def screen_session_exists(name: str) -> bool:
+    if not shutil.which("screen"):
+        raise LaunchError("screen is not installed")
+    result = subprocess.run(
+        ["screen", "-ls", name],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    combined = f"{result.stdout}\n{result.stderr}"
+    return f".{name}\t" in combined or f".{name} (" in combined
+
+
+def build_orchestrator_args(req: LaunchRequest) -> list[str]:
+    args = [str(req.limit)]
+    if req.labs is not None:
+        args.extend(["--labs", ",".join(req.labs)])
+    if req.at_moscow:
+        args.extend(["-a", req.at_moscow])
+    return args
+
+
+def find_screen_log(session: str) -> Path | None:
+    matches = sorted(LOGS_DIR.glob(f"phase1_screen_{session}_*.log"))
+    return matches[-1] if matches else None
+
+
+def save_launch_meta(session: str, payload: dict[str, Any]) -> Path:
+    LAUNCH_META_DIR.mkdir(parents=True, exist_ok=True)
+    path = LAUNCH_META_DIR / f"{session}.json"
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path
+
+
+def load_launch_meta(session: str) -> dict[str, Any] | None:
+    path = LAUNCH_META_DIR / f"{session}.json"
+    if not path.is_file():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def find_launch_meta_by_run_id(run_id: int) -> dict[str, Any] | None:
+    if not LAUNCH_META_DIR.is_dir():
+        return None
+    for path in LAUNCH_META_DIR.glob("*.json"):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+        if data.get("run_id") == run_id:
+            return data
+    return None
+
+
+def tail_file(path: Path, max_lines: int = 200) -> str:
+    if not path.is_file():
+        return ""
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    return "\n".join(lines[-max_lines:])
+
+
+def launch(req: LaunchRequest) -> LaunchResult:
+    validate_launch(req)
+    if screen_session_exists(req.screen_session):
+        raise LaunchError(f"screen session already exists: {req.screen_session}")
+
+    orch_args = build_orchestrator_args(req)
+    screen_script = PHASE1_DIR / "run_phase1_in_screen.sh"
+    if not screen_script.is_file():
+        raise LaunchError(f"missing launcher script: {screen_script}")
+
+    cmd = [str(screen_script), "-S", req.screen_session, *orch_args]
+
+    env = os_environ_copy_with_overrides(req)
+    result = subprocess.run(
+        cmd,
+        cwd=str(PHASE1_DIR),
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        raise LaunchError(detail or "failed to start screen session")
+
+    screen_log_path: Path | None = None
+    for _ in range(20):
+        screen_log_path = find_screen_log(req.screen_session)
+        if screen_log_path is not None:
+            break
+        time.sleep(0.25)
+
+    meta = {
+        "screen_session": req.screen_session,
+        "screen_log": str(screen_log_path) if screen_log_path else None,
+        "started_at": _iso_now(),
+        "limit": req.limit,
+        "labs": req.labs,
+        "at_moscow": req.at_moscow,
+        "target_model": req.target_model,
+        "grader_model": req.grader_model,
+        "max_connections": req.max_connections,
+        "orchestrator_args": orch_args,
+        "run_id": None,
+    }
+    meta_path = save_launch_meta(req.screen_session, meta)
+
+    return LaunchResult(
+        screen_session=req.screen_session,
+        screen_log=str(screen_log_path) if screen_log_path else None,
+        orchestrator_args=orch_args,
+        meta_path=str(meta_path),
+    )
+
+
+def os_environ_copy_with_overrides(req: LaunchRequest) -> dict[str, str]:
+    import os
+
+    env = os.environ.copy()
+    if req.target_model:
+        env["TARGET_MODEL"] = req.target_model
+    if req.grader_model:
+        env["GRADER_MODEL"] = req.grader_model
+    if req.max_connections is not None:
+        env["PHASE1_MAX_CONNECTIONS"] = str(req.max_connections)
+    env["PHASE1_SCREEN_SESSION"] = req.screen_session
+    return env
+
+
+def build_metrics(run_id: int) -> Path:
+    from admin.config import DEFAULT_LOG_DB, METRICS_DIR, PYTHON_BIN
+
+    out_dir = METRICS_DIR / f"run_{run_id}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    python = str(PYTHON_BIN) if PYTHON_BIN.is_file() else "python3"
+    metrics_script = PHASE1_DIR / "scripts" / "phase1_metrics.py"
+    result = subprocess.run(
+        [
+            python,
+            str(metrics_script),
+            "--sqlite",
+            str(DEFAULT_LOG_DB),
+            "--run-id",
+            str(run_id),
+            "--base-dir",
+            str(PHASE1_DIR),
+            "--out-dir",
+            str(out_dir),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or "metrics generation failed")
+    return out_dir / "report.html"
+
+
+def attach_run_id_to_session(screen_session: str, run_id: int) -> None:
+    meta = load_launch_meta(screen_session)
+    if meta is None:
+        return
+    meta["run_id"] = run_id
+    save_launch_meta(screen_session, meta)

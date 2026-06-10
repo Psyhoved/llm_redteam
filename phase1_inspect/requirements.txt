@@ -5,3 +5,7 @@ pandas
 requests
 python-dotenv
 openpyxl
+fastapi
+uvicorn[standard]
+jinja2
+python-multipart

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Прогоны — Phase 1 Admin{% endblock %}
+{% block content %}
+<h1>Прогоны</h1>
+<p class="muted">История orchestrated runs из <code>logs/phase1_runs.sqlite</code>.</p>
+
+<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Старт (UTC)</th>
+        <th>Limit</th>
+        <th>Лабы</th>
+        <th>Статус</th>
+        <th>Screen</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for run in runs %}
+      <tr>
+        <td><a href="/runs/{{ run.id }}">#{{ run.id }}</a></td>
+        <td>{{ run.started_at }}</td>
+        <td>{{ run.limit_val }}</td>
+        <td>{{ run.success_count }}/{{ run.lab_count }}</td>
+        <td><span class="status status-{{ run.status }}">{{ run.status }}</span></td>
+        <td>{% if run.screen_session %}<code>{{ run.screen_session }}</code>{% else %}—{% endif %}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="muted">Прогонов пока нет.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

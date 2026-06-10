@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Новый прогон — Phase 1 Admin{% endblock %}
+{% block content %}
+<h1>Новый прогон</h1>
+<p class="muted">Запуск идёт в detached <code>screen</code>. После старта откроется страница ожидания с live-логом.</p>
+
+<form method="post" action="/api/runs" class="card">
+  <div class="field">
+    <label>Режим лаб</label>
+    <div class="mode-row">
+      <label><input type="radio" name="mode" value="all" checked data-mode-radio> Все лабы (10)</label>
+      <label><input type="radio" name="mode" value="selected" data-mode-radio> Выбранные лабы</label>
+    </div>
+    <div id="lab-picker" class="hidden lab-grid">
+      {% for lab in labs %}
+      <div class="lab-item">
+        <label>
+          <input type="checkbox" name="labs" value="{{ lab.key }}">
+          <span>{{ lab.title }}<small>{{ lab.description }}</small></span>
+        </label>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="field">
+      <label for="limit">Limit (сэмплов на лабу)</label>
+      <input type="number" id="limit" name="limit" min="1" value="{{ default_limit }}" required>
+      <div class="preset-row">
+        {% for label, value in limit_presets %}
+        <button type="button" data-limit="{{ value }}">{{ label }} ({{ value }})</button>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="field">
+      <label for="screen_session">Screen session</label>
+      <input type="text" id="screen_session" name="screen_session" value="{{ default_session }}" required>
+    </div>
+  </div>
+
+  <div class="field">
+    <label for="at_moscow">Расписание MSK (опционально)</label>
+    <input type="text" id="at_moscow" name="at_moscow" placeholder="2026-06-15 03:00:00">
+    <small class="muted">GNU date, TZ=Europe/Moscow. Оставьте пустым для немедленного старта.</small>
+  </div>
+
+  <div class="grid-2">
+    <div class="field">
+      <label for="target_model">Target model override</label>
+      <input type="text" id="target_model" name="target_model" placeholder="{{ env_defaults.get('TARGET_MODEL', 'из .env') }}">
+    </div>
+    <div class="field">
+      <label for="grader_model">Grader model override</label>
+      <input type="text" id="grader_model" name="grader_model" placeholder="{{ env_defaults.get('GRADER_MODEL', 'из .env') }}">
+    </div>
+  </div>
+
+  <div class="field">
+    <label for="max_connections">Max connections override</label>
+    <input type="number" id="max_connections" name="max_connections" min="1" placeholder="{{ env_defaults.get('PHASE1_MAX_CONNECTIONS', '1') }}">
+  </div>
+
+  <button type="submit" class="btn">Запустить</button>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+  const modeRadios = document.querySelectorAll('[data-mode-radio]');
+  const labPicker = document.getElementById('lab-picker');
+  function syncLabPicker() {
+    const selected = document.querySelector('[data-mode-radio]:checked')?.value === 'selected';
+    labPicker.classList.toggle('hidden', !selected);
+  }
+  modeRadios.forEach(r => r.addEventListener('change', syncLabPicker));
+  syncLabPicker();
+
+  document.querySelectorAll('[data-limit]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.getElementById('limit').value = btn.dataset.limit;
+    });
+  });
+</script>
+{% endblock %}

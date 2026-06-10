@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Запуск… — Phase 1 Admin{% endblock %}
+{% block content %}
+<h1>Запуск прогона</h1>
+<p class="muted">
+  Screen session: <code>{{ screen_session }}</code>.
+  Ожидаем появления <code>run_id</code> в SQLite после старта orchestrator
+  {% if meta and meta.at_moscow %}(после MSK расписания){% endif %}.
+</p>
+
+{% if meta %}
+<div class="card">
+  <p>Limit: <strong>{{ meta.limit }}</strong></p>
+  <p>Labs: <strong>{% if meta.labs %}{{ meta.labs | join(', ') }}{% else %}все{% endif %}</strong></p>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Live log</h2>
+  <div hx-get="/api/pending/{{ screen_session }}/screen-log" hx-trigger="load, every 3s" hx-swap="innerHTML">
+    <pre class="log-tail">loading...</pre>
+  </div>
+</div>
+
+<div
+  hx-get="/api/pending/{{ screen_session }}/status"
+  hx-trigger="load, every 3s"
+  hx-swap="none"
+  id="pending-status"
+></div>
+{% endblock %}
+{% block scripts %}
+<script>
+  document.body.addEventListener('htmx:afterOnLoad', function (evt) {
+    if (!evt.detail.pathInfo.requestPath.includes('/api/pending/')) return;
+    if (!evt.detail.pathInfo.requestPath.endsWith('/status')) return;
+    try {
+      const data = JSON.parse(evt.detail.xhr.responseText);
+      if (data.ready && data.run_id) {
+        window.location.href = '/runs/' + data.run_id;
+      }
+    } catch (_) {}
+  });
+</script>
+{% endblock %}

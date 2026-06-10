@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Прогон #{{ run.id }} — Phase 1 Admin{% endblock %}
+{% block content %}
+<h1>Прогон #{{ run.id }}</h1>
+<p>
+  <span class="status status-{{ run.status }}">{{ run.status }}</span>
+  &nbsp; limit={{ run.limit_val }}
+  {% if run.screen_session %} &nbsp; screen=<code>{{ run.screen_session }}</code>{% endif %}
+</p>
+
+<div class="grid-2">
+  <div class="card">
+    <h2>Лабы</h2>
+    <table>
+      <thead>
+        <tr><th>Лаба</th><th>Статус</th><th>Eval log</th></tr>
+      </thead>
+      <tbody>
+        {% for lab in lab_runs %}
+        <tr>
+          <td>{{ lab.lab_name }}</td>
+          <td>
+            {% if lab.exit_code == 0 %}
+            <span class="status status-ok">ok</span>
+            {% else %}
+            <span class="status status-failed">fail</span>
+            {% endif %}
+          </td>
+          <td>{% if lab.eval_log %}<code>{{ lab.eval_log }}</code>{% else %}—{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3" class="muted">Лабы ещё не стартовали.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% for lab in lab_runs %}
+      {% if lab.reason %}
+      <p class="muted"><strong>{{ lab.lab_name }}:</strong> {{ lab.reason }}</p>
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  <div class="card">
+    <h2>Отчёты</h2>
+    {% if metrics_report_exists %}
+    <p>Metrics report: <code>{{ metrics_report_path }}</code></p>
+    {% else %}
+    <form method="post" action="/api/runs/{{ run.id }}/metrics">
+      <button type="submit" class="btn btn-secondary">Собрать metrics report</button>
+    </form>
+    {% endif %}
+    <p class="muted">Inspect view (отдельный процесс):</p>
+    <pre class="log-tail">ssh -L {{ inspect_view_port }}:127.0.0.1:{{ inspect_view_port }} user@server
+cd phase1_inspect && source .venv/bin/activate
+python -m inspect_ai view start --host 0.0.0.0 --port {{ inspect_view_port }} --log-dir . --recursive</pre>
+    {% if run.screen_session %}
+    <p class="muted">Attach к screen: <code>screen -r {{ run.screen_session }}</code></p>
+    {% endif %}
+  </div>
+</div>
+
+{% if screen_log %}
+<div class="card">
+  <h2>Live log</h2>
+  <div hx-get="/api/runs/{{ run.id }}/screen-log" hx-trigger="load, every 5s" hx-swap="innerHTML">
+    <pre class="log-tail">loading...</pre>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
