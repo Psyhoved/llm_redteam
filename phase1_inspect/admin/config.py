@@ -16,6 +16,9 @@ METRICS_DIR = PHASE1_DIR / "reports" / "phase1_metrics"
 PYTHON_BIN = PHASE1_DIR / ".venv" / "bin" / "python"
 ADMIN_PORT = int(os.environ.get("PHASE1_ADMIN_PORT", "8080"))
 INSPECT_VIEW_PORT = int(os.environ.get("PHASE1_INSPECT_VIEW_PORT", "7575"))
+INSPECT_VIEW_URL = os.environ.get(
+    "PHASE1_INSPECT_VIEW_URL", f"http://127.0.0.1:{INSPECT_VIEW_PORT}"
+)
 
 LIMIT_PRESETS = [
     ("Smoke", 1),

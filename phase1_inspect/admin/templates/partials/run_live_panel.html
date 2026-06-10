@@ -1,0 +1,68 @@
+{% set terminal_statuses = ['ok', 'failed', 'partial_fail', 'stale'] %}
+{% if effective_status in terminal_statuses %}
+<span data-terminal="1" hidden></span>
+{% endif %}
+
+<p class="run-status-line">
+  <span class="status status-{{ effective_status }}">{{ effective_status }}</span>
+  &nbsp; limit={{ run.limit_val }}
+  {% if run.screen_session %} &nbsp; screen=<code>{{ run.screen_session }}</code>{% endif %}
+</p>
+
+{% if stale %}
+<div class="banner banner-warn">
+  Screen-сессия <code>{{ run.screen_session }}</code> не активна — прогон помечен как stale.
+</div>
+{% endif %}
+
+{% if progress.current_benchmark %}
+<p class="muted">Текущий бенчмарк: <strong>{{ progress.current_benchmark }}</strong></p>
+{% endif %}
+{% if progress.samples_done is not none and progress.samples_total %}
+<div class="progress-wrap">
+  <div class="progress-bar" style="width: {{ (100 * progress.samples_done / progress.samples_total) | round(1) }}%"></div>
+</div>
+<p class="muted progress-label">{{ progress.samples_done }} / {{ progress.samples_total }} samples</p>
+{% elif progress.samples_done is not none %}
+<p class="muted progress-label">{{ progress.samples_done }} samples completed</p>
+{% endif %}
+
+<div class="card nested-card">
+  <h2>Бенчмарки</h2>
+  <table>
+    <thead>
+      <tr><th>Бенчмарк</th><th>Статус</th><th>Прогресс</th><th>Eval log</th></tr>
+    </thead>
+    <tbody>
+      {% for lab in lab_runs %}
+      <tr>
+        <td>{{ lab.lab_name }}</td>
+        <td>
+          {% if lab.exit_code == -1 or lab.status == 'running' %}
+          <span class="status status-running">running</span>
+          {% elif lab.exit_code == 0 %}
+          <span class="status status-ok">ok</span>
+          {% else %}
+          <span class="status status-failed">fail</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if lab.samples_done is not none and lab.samples_total %}
+          {{ lab.samples_done }}/{{ lab.samples_total }}
+          {% elif lab.samples_done is not none %}
+          {{ lab.samples_done }}
+          {% else %}—{% endif %}
+        </td>
+        <td>{% if lab.eval_log %}<code>{{ lab.eval_log }}</code>{% else %}—{% endif %}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="muted">Бенчмарки ещё не стартовали.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% for lab in lab_runs %}
+    {% if lab.reason %}
+    <p class="muted"><strong>{{ lab.lab_name }}:</strong> {{ lab.reason }}</p>
+    {% endif %}
+  {% endfor %}
+</div>

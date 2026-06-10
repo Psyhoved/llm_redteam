@@ -76,27 +76,33 @@ sudo playwright install-deps chromium   # один раз на сервере
 
 ### Детали прогона (`/runs/{id}`)
 
-- Статус каждого бенчмарка и путь к `.eval`
+- **Live-панель** (HTMX каждые 3 с): статус, progress bar, таблица бенчмарков — без F5; polling останавливается при завершении
+- **Samples (live)**: компактная таблица промпт / ответ / оценка из текущего `.eval`
+- **Inspect Live**: ссылка на dashboard + iframe (если viewer online)
 - Live tail screen-лога (HTMX polling)
 - Кнопка сборки `reports/phase1_metrics/run_<id>/report.html`
-- Инструкция для Inspect view
 
-## Inspect view (отдельно)
+Список прогонов (`/runs`) тоже авто-обновляется, пока есть `running` строки.
 
-Админка не встраивает Inspect UI. Для просмотра `.eval` логов:
+## Inspect view
+
+Запуск viewer (отдельный процесс):
 
 ```bash
-# на сервере
 cd ~/llm_redteam/phase1_inspect
-source .venv/bin/activate
-screen -dmS inspect_view bash -lc '
-  python -m inspect_ai view start     --host 0.0.0.0 --port 7575     --log-dir . --recursive
-'
-
-# локально
-ssh -L 7575:127.0.0.1:7575 administrator@<SERVER_IP>
-# http://127.0.0.1:7575
+chmod +x ./run_inspect_view.sh
+screen -dmS inspect_view bash -lc './run_inspect_view.sh'
 ```
+
+SSH-туннель для админки **и** Inspect:
+
+```bash
+ssh -L 8080:127.0.0.1:8080 -L 7575:127.0.0.1:7575 administrator@<SERVER_IP>
+# админка: http://127.0.0.1:8080
+# inspect:  http://127.0.0.1:7575
+```
+
+Переменные: `PHASE1_INSPECT_VIEW_PORT`, `PHASE1_INSPECT_VIEW_URL` (default `http://127.0.0.1:7575`).
 
 ## CLI (без UI)
 

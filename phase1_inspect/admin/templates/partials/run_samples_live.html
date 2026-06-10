@@ -1,0 +1,36 @@
+{% if samples_loading and not samples %}
+<p class="muted">Чтение .eval…{% if eval_log %} <code>{{ eval_log }}</code>{% endif %}</p>
+{% elif samples_error %}
+<p class="muted">{{ samples_error }}</p>
+{% elif samples %}
+<table class="samples-live-table">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Промпт</th>
+      <th>Ответ</th>
+      <th>Оценка</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for s in samples %}
+    <tr>
+      <td><code>{{ s.id }}</code>{% if s.epoch %}<br><small>ep {{ s.epoch }}</small>{% endif %}</td>
+      <td class="sample-cell">{{ s.input_preview }}</td>
+      <td class="sample-cell">{{ s.output_preview or '—' }}</td>
+      <td>
+        {% if s.error %}
+        <span class="status status-failed">err</span> {{ s.error }}
+        {% elif s.scores %}
+        {% for name, val in s.scores.items() %}
+        <div><small>{{ name }}:</small> {{ val }}</div>
+        {% endfor %}
+        {% else %}—{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">Ожидание первого sample…</p>
+{% endif %}

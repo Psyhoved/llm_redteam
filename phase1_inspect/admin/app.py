@@ -11,7 +11,9 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from admin import config, db, runner
+import asyncio
+
+from admin import config, db, inspect_view, runner
 
 APP_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(APP_DIR / "templates"))
@@ -26,6 +28,121 @@ def _parse_benchmarks(mode: str, selected: list[str] | None) -> list[str] | None
     if not selected:
         raise HTTPException(status_code=400, detail="select at least one benchmark")
     return selected
+
+
+def _live_panel_context(run_id: int) -> dict[str, Any]:
+    try:
+        payload = db.get_run(run_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    run = payload["run"]
+    progress: dict[str, Any] = {}
+    try:
+        progress = db.get_run_progress(run_id)
+    except RuntimeError:
+        progress = {}
+    effective_status = runner.resolve_run_status({**run, **progress})
+    stale = effective_status == "stale" or bool(progress.get("stale"))
+    run = {**run, "status": effective_status, "stale": stale}
+    return {
+        "run": run,
+        "lab_runs": progress.get("lab_runs") or payload["lab_runs"],
+        "progress": progress,
+        "stale": stale,
+        "effective_status": effective_status,
+    }
+
+
+def _resolve_eval_log_path(eval_log: str) -> Path:
+    path = Path(eval_log)
+    if not path.is_file():
+        alt = config.PHASE1_DIR / eval_log
+        if alt.is_file():
+            return alt
+    return path
+
+
+def _current_eval_log(progress: dict[str, Any]) -> str | None:
+    lab_runs = progress.get("lab_runs") or []
+    for lr in reversed(lab_runs):
+        eval_log = lr.get("eval_log")
+        if eval_log:
+            return str(_resolve_eval_log_path(str(eval_log)))
+    benchmark = progress.get("current_benchmark")
+    if not benchmark:
+        return None
+    from scripts.phase1_progress import find_newest_eval_log
+
+    found = find_newest_eval_log(config.PHASE1_DIR, str(benchmark))
+    return str(found) if found else None
+
+
+def _fetch_live_samples_sync(eval_log: str, limit: int = 20) -> tuple[list[dict[str, Any]], str]:
+    from scripts.phase1_live_samples import collect_samples
+
+    path = _resolve_eval_log_path(eval_log)
+    if not path.is_file():
+        return [], f"eval log not found: {path}"
+    try:
+        return list(collect_samples(path, limit=limit)), ""
+    except Exception as ex:  # noqa: BLE001
+        return [], f"{type(ex).__name__}: {ex}"
+
+
+async def _fetch_live_samples(eval_log: str, limit: int = 20) -> tuple[list[dict[str, Any]], str]:
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(_fetch_live_samples_sync, eval_log, limit),
+            timeout=30.0,
+        )
+    except asyncio.TimeoutError:
+        return [], "таймаут чтения .eval (файл ещё пишется?)"
+
+
+def _samples_live_context(progress: dict[str, Any]) -> dict[str, Any]:
+    eval_log = _current_eval_log(progress)
+    samples_error = ""
+    if eval_log:
+        samples_error = ""
+    elif progress.get("current_benchmark"):
+        samples_error = "ожидание .eval файла…"
+    else:
+        samples_error = "нет активного бенчмарка"
+    return {
+        "samples": [],
+        "samples_error": samples_error,
+        "eval_log": eval_log,
+        "samples_loading": bool(eval_log),
+    }
+
+
+async def _samples_live_context_loaded(progress: dict[str, Any]) -> dict[str, Any]:
+    ctx = _samples_live_context(progress)
+    if ctx["eval_log"]:
+        samples, err = await _fetch_live_samples(str(ctx["eval_log"]))
+        ctx["samples"] = samples
+        if err:
+            ctx["samples_error"] = err
+        ctx["samples_loading"] = False
+    return ctx
+
+
+def _inspect_context(progress: dict[str, Any], effective_status: str) -> dict[str, Any]:
+    eval_log = _current_eval_log(progress)
+    online = inspect_view.is_inspect_view_running()
+    dashboard_url = inspect_view.inspect_dashboard_url(eval_log)
+    show_iframe = online and (
+        effective_status == "running" or bool(eval_log)
+    )
+    return {
+        "inspect_view_online": online,
+        "inspect_view_url": config.INSPECT_VIEW_URL,
+        "inspect_dashboard_url": dashboard_url,
+        "inspect_start_command": inspect_view.start_command(),
+        "inspect_view_port": config.INSPECT_VIEW_PORT,
+        "show_inspect_iframe": show_iframe,
+        "current_eval_log": eval_log,
+    }
 
 
 def _resolve_run_context(run_id: int) -> dict[str, Any]:
@@ -56,18 +173,19 @@ def _resolve_run_context(run_id: int) -> dict[str, Any]:
         found = runner.find_screen_log(run["screen_session"])
         screen_log = str(found) if found else None
     metrics_report = config.METRICS_DIR / f"run_{run_id}" / "report.html"
-    return {
+    ctx = {
         "run": run,
         "lab_runs": progress.get("lab_runs") or payload["lab_runs"],
         "meta": meta,
         "screen_log": screen_log,
         "metrics_report_exists": metrics_report.is_file(),
         "metrics_report_path": str(metrics_report),
-        "inspect_view_port": config.INSPECT_VIEW_PORT,
         "progress": progress,
         "stale": stale,
         "effective_status": effective_status,
     }
+    ctx.update(_inspect_context(progress, effective_status))
+    return ctx
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -113,6 +231,7 @@ async def run_pending(request: Request, screen_session: str) -> HTMLResponse:
 @app.get("/runs/{run_id}", response_class=HTMLResponse)
 async def run_detail(request: Request, run_id: int) -> HTMLResponse:
     ctx = _resolve_run_context(run_id)
+    ctx.update(await _samples_live_context_loaded(ctx["progress"]))
     return templates.TemplateResponse(request, "run_detail.html", ctx)
 
 
@@ -121,12 +240,49 @@ async def api_list_runs(limit: int = 50) -> JSONResponse:
     return JSONResponse(db.list_runs(limit=limit))
 
 
+@app.get("/api/runs/table", response_model=None)
+async def api_runs_table(request: Request) -> HTMLResponse:
+    runs = db.list_runs(limit=100)
+    return templates.TemplateResponse(
+        request,
+        "partials/runs_table_body.html",
+        {"runs": runs},
+    )
+
+
 @app.get("/api/runs/{run_id}")
 async def api_get_run(run_id: int) -> JSONResponse:
     try:
         return JSONResponse(db.get_run(run_id))
     except RuntimeError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/runs/{run_id}/live-panel", response_model=None)
+async def api_run_live_panel(request: Request, run_id: int):
+    ctx = _live_panel_context(run_id)
+    if request.headers.get("accept", "").startswith("application/json"):
+        return JSONResponse(ctx)
+    if request.headers.get("HX-Request"):
+        return templates.TemplateResponse(
+            request,
+            "partials/run_live_panel.html",
+            ctx,
+        )
+    return JSONResponse(ctx)
+
+
+@app.get("/api/runs/{run_id}/samples-live", response_model=None)
+async def api_run_samples_live(request: Request, run_id: int):
+    ctx = _live_panel_context(run_id)
+    template_ctx = await _samples_live_context_loaded(ctx["progress"])
+    if request.headers.get("accept", "").startswith("application/json"):
+        return JSONResponse(template_ctx)
+    return templates.TemplateResponse(
+        request,
+        "partials/run_samples_live.html",
+        template_ctx,
+    )
 
 
 @app.get("/api/runs/{run_id}/progress", response_model=None)

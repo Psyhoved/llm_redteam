@@ -2,68 +2,24 @@
 {% block title %}Прогон #{{ run.id }} — Phase 1 Admin{% endblock %}
 {% block content %}
 <h1>Прогон #{{ run.id }}</h1>
-<p>
-  <span class="status status-{{ effective_status }}">{{ effective_status }}</span>
-  &nbsp; limit={{ run.limit_val }}
-  {% if run.screen_session %} &nbsp; screen=<code>{{ run.screen_session }}</code>{% endif %}
-</p>
 
-{% if stale %}
-<div class="banner banner-warn">
-  Screen-сессия <code>{{ run.screen_session }}</code> не активна — прогон помечен как stale.
+<div id="run-live-panel"
+     hx-get="/api/runs/{{ run.id }}/live-panel"
+     hx-trigger="load, every 3s"
+     hx-swap="innerHTML">
+  {% include "partials/run_live_panel.html" %}
 </div>
-{% endif %}
-
-{% if effective_status == 'running' or progress %}
-<div class="card" id="run-progress-card"
-  {% if effective_status == 'running' %}
-  hx-get="/api/runs/{{ run.id }}/progress"
-  hx-trigger="load, every 5s"
-  hx-swap="innerHTML"
-  {% endif %}>
-  {% include "partials/run_progress.html" %}
-</div>
-{% endif %}
 
 <div class="grid-2">
   <div class="card">
-    <h2>Бенчмарки</h2>
-    <table>
-      <thead>
-        <tr><th>Бенчмарк</th><th>Статус</th><th>Прогресс</th><th>Eval log</th></tr>
-      </thead>
-      <tbody>
-        {% for lab in lab_runs %}
-        <tr>
-          <td>{{ lab.lab_name }}</td>
-          <td>
-            {% if lab.exit_code == -1 or lab.status == 'running' %}
-            <span class="status status-running">running</span>
-            {% elif lab.exit_code == 0 %}
-            <span class="status status-ok">ok</span>
-            {% else %}
-            <span class="status status-failed">fail</span>
-            {% endif %}
-          </td>
-          <td>
-            {% if lab.samples_done is not none and lab.samples_total %}
-            {{ lab.samples_done }}/{{ lab.samples_total }}
-            {% elif lab.samples_done is not none %}
-            {{ lab.samples_done }}
-            {% else %}—{% endif %}
-          </td>
-          <td>{% if lab.eval_log %}<code>{{ lab.eval_log }}</code>{% else %}—{% endif %}</td>
-        </tr>
-        {% else %}
-        <tr><td colspan="4" class="muted">Бенчмарки ещё не стартовали.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% for lab in lab_runs %}
-      {% if lab.reason %}
-      <p class="muted"><strong>{{ lab.lab_name }}:</strong> {{ lab.reason }}</p>
-      {% endif %}
-    {% endfor %}
+    <h2>Samples (live)</h2>
+    <div id="run-samples-live-panel"
+         hx-get="/api/runs/{{ run.id }}/samples-live"
+         hx-trigger="every 5s"
+         hx-swap="innerHTML"
+         hx-on::response-error="this.innerHTML='<p class=&quot;muted&quot;>Ошибка загрузки samples (HTTP '+event.detail.xhr.status+'). Перезапустите админку если endpoint 404.</p>'">
+      {% include "partials/run_samples_live.html" %}
+    </div>
   </div>
 
   <div class="card">
@@ -75,14 +31,31 @@
       <button type="submit" class="btn btn-secondary">Собрать metrics report</button>
     </form>
     {% endif %}
-    <p class="muted">Inspect view (отдельный процесс):</p>
-    <pre class="log-tail">ssh -L {{ inspect_view_port }}:127.0.0.1:{{ inspect_view_port }} user@server
-cd phase1_inspect && source .venv/bin/activate
-python -m inspect_ai view start --host 0.0.0.0 --port {{ inspect_view_port }} --log-dir . --recursive</pre>
     {% if run.screen_session %}
     <p class="muted">Attach к screen: <code>screen -r {{ run.screen_session }}</code></p>
     {% endif %}
   </div>
+</div>
+
+<div class="card">
+  <h2>Inspect Live</h2>
+  {% if inspect_view_online %}
+  <p><span class="status status-ok">Inspect View: online</span></p>
+  <p>
+    <a class="btn btn-secondary" href="{{ inspect_dashboard_url }}" target="_blank" rel="noopener">
+      Открыть Inspect Dashboard
+    </a>
+  </p>
+  {% if show_inspect_iframe %}
+  <iframe class="inspect-iframe" src="{{ inspect_view_url }}" title="Inspect AI View"></iframe>
+  {% endif %}
+  {% else %}
+  <p><span class="status status-stale">Inspect View: offline</span></p>
+  <p class="muted">Запустите viewer на сервере:</p>
+  <pre class="log-tail">{{ inspect_start_command }}</pre>
+  <p class="muted">SSH-туннель (админка + Inspect):</p>
+  <pre class="log-tail">ssh -L 8080:127.0.0.1:8080 -L {{ inspect_view_port }}:127.0.0.1:{{ inspect_view_port }} user@server</pre>
+  {% endif %}
 </div>
 
 {% if screen_log %}
@@ -93,4 +66,38 @@ python -m inspect_ai view start --host 0.0.0.0 --port {{ inspect_view_port }} --
   </div>
 </div>
 {% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+  function stopPollingIfTerminal(container) {
+    if (!container) return;
+    if (container.querySelector('[data-terminal]')) {
+      container.removeAttribute('hx-trigger');
+    }
+  }
+
+  document.body.addEventListener('htmx:afterSwap', function (evt) {
+    const target = evt.detail.target;
+    if (target.id === 'run-live-panel') {
+      stopPollingIfTerminal(target);
+      const terminal = target.querySelector('[data-terminal]');
+      if (terminal) {
+        stopPollingIfTerminal(document.getElementById('run-samples-live-panel'));
+      }
+    }
+    if (target.id === 'run-samples-live-panel') {
+      stopPollingIfTerminal(target);
+    }
+  });
+
+  document.body.addEventListener('htmx:responseError', function (evt) {
+    const target = evt.detail.target;
+    if (target && target.id === 'run-live-panel') {
+      target.insertAdjacentHTML(
+        'afterbegin',
+        '<p class="muted">Ошибка обновления панели (HTTP ' + evt.detail.xhr.status + ').</p>'
+      );
+    }
+  });
+</script>
 {% endblock %}
