@@ -294,13 +294,52 @@ for run_spec in "${RUNS[@]}"; do
   status_reason=""
   status_value=""
   eval_log_path=""
+  progress_pid=""
 
   tmp_out="$(mktemp)"
   tmp_err="$(mktemp)"
   tmp_meta="$(mktemp)"
+  : >"$tmp_err"
   lab_started="$(date -Is -u)"
-  bash -lc "$cmd" >"$tmp_out" 2>"$tmp_err" || raw_exit_code=$?
+
+  if [[ -n "$LOG_DB" ]]; then
+    "$PYTHON_BIN" "$SCRIPT_DIR/scripts/phase1_log.py" start-benchmark \
+      --db "$LOG_DB" \
+      --run-id "$RUN_ID" \
+      --lab-name "$name" \
+      --samples-total "$LIMIT" || true
+    (
+      while true; do
+        progress_json="$("$PYTHON_BIN" "$SCRIPT_DIR/scripts/phase1_progress.py" \
+          --db "$LOG_DB" \
+          --run-id "$RUN_ID" \
+          --benchmark-name "$name" \
+          --base-dir "$SCRIPT_DIR" \
+          --limit "$LIMIT" 2>/dev/null || echo '{}')"
+        samples_done="$("$PYTHON_BIN" -c 'import json,sys; d=json.loads(sys.argv[1]); print(d.get("samples_done", 0))' "$progress_json")"
+        samples_total="$("$PYTHON_BIN" -c 'import json,sys; d=json.loads(sys.argv[1]); print(d.get("samples_total", 0))' "$progress_json")"
+        if [[ -n "$samples_done" && -n "$samples_total" ]]; then
+          "$PYTHON_BIN" "$SCRIPT_DIR/scripts/phase1_log.py" update-benchmark-progress \
+            --db "$LOG_DB" \
+            --run-id "$RUN_ID" \
+            --lab-name "$name" \
+            --samples-done "$samples_done" \
+            --samples-total "$samples_total" 2>/dev/null || true
+        fi
+        sleep 15
+      done
+    ) &
+    progress_pid=$!
+  fi
+
+  bash -lc "$cmd" 2>&1 | tee "$tmp_out" || raw_exit_code=$?
+  cp "$tmp_out" "$tmp_err"
   lab_finished="$(date -Is -u)"
+
+  if [[ -n "$progress_pid" ]]; then
+    kill "$progress_pid" 2>/dev/null || true
+    wait "$progress_pid" 2>/dev/null || true
+  fi
 
   echo "--- stdout (${name}) ---"
   cat "$tmp_out"
@@ -319,20 +358,42 @@ for run_spec in "${RUNS[@]}"; do
   status_value="$(json_field "$tmp_meta" status)"
   eval_log_path="$(json_field "$tmp_meta" eval_log)"
 
+  final_samples_done=""
+  final_samples_total=""
   if [[ -n "$LOG_DB" ]]; then
-    "$PYTHON_BIN" "$SCRIPT_DIR/scripts/phase1_log.py" insert-lab \
+    progress_json="$("$PYTHON_BIN" "$SCRIPT_DIR/scripts/phase1_progress.py" \
       --db "$LOG_DB" \
       --run-id "$RUN_ID" \
-      --lab-name "$name" \
-      --started-at "$lab_started" \
-      --finished-at "$lab_finished" \
-      --exit-code "$effective_exit_code" \
-      --raw-exit-code "$raw_exit_code" \
-      --status "$status_value" \
-      --reason "$status_reason" \
-      --eval-log "$eval_log_path" \
-      --stdout-file "$tmp_out" \
+      --benchmark-name "$name" \
+      --base-dir "$SCRIPT_DIR" \
+      --limit "$LIMIT" 2>/dev/null || echo '{}')"
+    final_samples_done="$("$PYTHON_BIN" -c 'import json,sys; d=json.loads(sys.argv[1]); print(d.get("samples_done", ""))' "$progress_json")"
+    final_samples_total="$("$PYTHON_BIN" -c 'import json,sys; d=json.loads(sys.argv[1]); print(d.get("samples_total", ""))' "$progress_json")"
+  fi
+
+  if [[ -n "$LOG_DB" ]]; then
+    finish_args=(
+      "$PYTHON_BIN" "$SCRIPT_DIR/scripts/phase1_log.py" finish-benchmark
+      --db "$LOG_DB"
+      --run-id "$RUN_ID"
+      --lab-name "$name"
+      --started-at "$lab_started"
+      --finished-at "$lab_finished"
+      --exit-code "$effective_exit_code"
+      --raw-exit-code "$raw_exit_code"
+      --status "$status_value"
+      --reason "$status_reason"
+      --eval-log "$eval_log_path"
+      --stdout-file "$tmp_out"
       --stderr-file "$tmp_err"
+    )
+    if [[ -n "$final_samples_done" ]]; then
+      finish_args+=(--samples-done "$final_samples_done")
+    fi
+    if [[ -n "$final_samples_total" ]]; then
+      finish_args+=(--samples-total "$final_samples_total")
+    fi
+    "${finish_args[@]}"
   fi
 
   rm -f "$tmp_out" "$tmp_err" "$tmp_meta"

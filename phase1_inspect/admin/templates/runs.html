@@ -12,6 +12,7 @@
         <th>Старт (UTC)</th>
         <th>Limit</th>
         <th>Бенчмарки</th>
+        <th>Прогресс</th>
         <th>Статус</th>
         <th>Screen</th>
       </tr>
@@ -23,11 +24,18 @@
         <td>{{ run.started_at }}</td>
         <td>{{ run.limit_val }}</td>
         <td>{{ run.success_count }}/{{ run.lab_count }}</td>
+        <td>
+          {% if run.samples_done is not none and run.samples_total %}
+          {{ run.samples_done }}/{{ run.samples_total }}
+          {% elif run.current_benchmark %}
+          <span class="muted">{{ run.current_benchmark }}…</span>
+          {% else %}—{% endif %}
+        </td>
         <td><span class="status status-{{ run.status }}">{{ run.status }}</span></td>
         <td>{% if run.screen_session %}<code>{{ run.screen_session }}</code>{% else %}—{% endif %}</td>
       </tr>
       {% else %}
-      <tr><td colspan="6" class="muted">Прогонов пока нет.</td></tr>
+      <tr><td colspan="7" class="muted">Прогонов пока нет.</td></tr>
       {% endfor %}
     </tbody>
   </table>

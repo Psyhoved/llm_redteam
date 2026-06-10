@@ -85,6 +85,39 @@ def screen_session_exists(name: str) -> bool:
     return f".{name}\t" in combined or f".{name} (" in combined
 
 
+def screen_session_alive(session: str | None) -> bool | None:
+    if not session:
+        return None
+    if not shutil.which("screen"):
+        return None
+    return screen_session_exists(session)
+
+
+def resolve_run_status(run: dict[str, Any]) -> str:
+    """Return running|stale|ok|failed|partial_fail for a run summary dict."""
+    finished_at = run.get("finished_at")
+    orchestrator_exit = run.get("orchestrator_exit")
+    lab_count = run.get("lab_count", 0) or 0
+    success_count = run.get("success_count", 0) or 0
+
+    if finished_at is None:
+        base = "running"
+    elif orchestrator_exit == 0:
+        base = "ok"
+    elif success_count > 0:
+        base = "partial_fail"
+    else:
+        base = "failed"
+
+    if base == "running":
+        alive = screen_session_alive(run.get("screen_session"))
+        if alive is False:
+            return "stale"
+    if run.get("stale"):
+        return "stale"
+    return base
+
+
 def build_orchestrator_args(req: LaunchRequest) -> list[str]:
     args = [str(req.limit)]
     if req.benchmarks is not None:

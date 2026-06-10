@@ -3,33 +3,59 @@
 {% block content %}
 <h1>Прогон #{{ run.id }}</h1>
 <p>
-  <span class="status status-{{ run.status }}">{{ run.status }}</span>
+  <span class="status status-{{ effective_status }}">{{ effective_status }}</span>
   &nbsp; limit={{ run.limit_val }}
   {% if run.screen_session %} &nbsp; screen=<code>{{ run.screen_session }}</code>{% endif %}
 </p>
+
+{% if stale %}
+<div class="banner banner-warn">
+  Screen-сессия <code>{{ run.screen_session }}</code> не активна — прогон помечен как stale.
+</div>
+{% endif %}
+
+{% if effective_status == 'running' or progress %}
+<div class="card" id="run-progress-card"
+  {% if effective_status == 'running' %}
+  hx-get="/api/runs/{{ run.id }}/progress"
+  hx-trigger="load, every 5s"
+  hx-swap="innerHTML"
+  {% endif %}>
+  {% include "partials/run_progress.html" %}
+</div>
+{% endif %}
 
 <div class="grid-2">
   <div class="card">
     <h2>Бенчмарки</h2>
     <table>
       <thead>
-        <tr><th>Бенчмарк</th><th>Статус</th><th>Eval log</th></tr>
+        <tr><th>Бенчмарк</th><th>Статус</th><th>Прогресс</th><th>Eval log</th></tr>
       </thead>
       <tbody>
         {% for lab in lab_runs %}
         <tr>
           <td>{{ lab.lab_name }}</td>
           <td>
-            {% if lab.exit_code == 0 %}
+            {% if lab.exit_code == -1 or lab.status == 'running' %}
+            <span class="status status-running">running</span>
+            {% elif lab.exit_code == 0 %}
             <span class="status status-ok">ok</span>
             {% else %}
             <span class="status status-failed">fail</span>
             {% endif %}
           </td>
+          <td>
+            {% if lab.samples_done is not none and lab.samples_total %}
+            {{ lab.samples_done }}/{{ lab.samples_total }}
+            {% elif lab.samples_done is not none %}
+            {{ lab.samples_done }}
+            {% else %}—{% endif %}
+          </td>
           <td>{% if lab.eval_log %}<code>{{ lab.eval_log }}</code>{% else %}—{% endif %}</td>
         </tr>
         {% else %}
-        <tr><td colspan="3" class="muted">Бенчмарки ещё не стартовали.</td></tr>
+        <tr><td colspan="4" class="muted">Бенчмарки ещё не стартовали.</td></tr>
         {% endfor %}
       </tbody>
     </table>

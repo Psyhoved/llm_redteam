@@ -34,6 +34,20 @@ def _resolve_run_context(run_id: int) -> dict[str, Any]:
     except RuntimeError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     run = payload["run"]
+    progress: dict[str, Any] = {}
+    try:
+        progress = db.get_run_progress(run_id)
+    except RuntimeError:
+        progress = {}
+    effective_status = runner.resolve_run_status({**run, **progress})
+    stale = effective_status == "stale" or bool(progress.get("stale"))
+    run = {**run, "status": effective_status, "stale": stale}
+    if progress.get("samples_done") is not None:
+        run["samples_done"] = progress["samples_done"]
+    if progress.get("samples_total") is not None:
+        run["samples_total"] = progress["samples_total"]
+    if progress.get("current_benchmark"):
+        run["current_benchmark"] = progress["current_benchmark"]
     meta = runner.find_launch_meta_by_run_id(run_id)
     screen_log = None
     if meta and meta.get("screen_log"):
@@ -44,12 +58,15 @@ def _resolve_run_context(run_id: int) -> dict[str, Any]:
     metrics_report = config.METRICS_DIR / f"run_{run_id}" / "report.html"
     return {
         "run": run,
-        "lab_runs": payload["lab_runs"],
+        "lab_runs": progress.get("lab_runs") or payload["lab_runs"],
         "meta": meta,
         "screen_log": screen_log,
         "metrics_report_exists": metrics_report.is_file(),
         "metrics_report_path": str(metrics_report),
         "inspect_view_port": config.INSPECT_VIEW_PORT,
+        "progress": progress,
+        "stale": stale,
+        "effective_status": effective_status,
     }
 
 
@@ -110,6 +127,25 @@ async def api_get_run(run_id: int) -> JSONResponse:
         return JSONResponse(db.get_run(run_id))
     except RuntimeError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/runs/{run_id}/progress", response_model=None)
+async def api_run_progress(request: Request, run_id: int):
+    try:
+        progress = db.get_run_progress(run_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    run_payload = db.get_run(run_id)["run"]
+    effective_status = runner.resolve_run_status({**run_payload, **progress})
+    progress["status"] = effective_status
+    progress["stale"] = effective_status == "stale" or bool(progress.get("stale"))
+    if request.headers.get("HX-Request"):
+        return templates.TemplateResponse(
+            request,
+            "partials/run_progress.html",
+            {"progress": progress, "run_id": run_id},
+        )
+    return JSONResponse(progress)
 
 
 @app.get("/api/runs/{run_id}/screen-log")

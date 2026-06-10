@@ -47,3 +47,8 @@ def find_run_by_session(screen_session: str, db: Path | None = None) -> int | No
         db=db,
     ).strip()
     return int(out) if out else None
+
+
+def get_run_progress(run_id: int, db: Path | None = None) -> dict[str, Any]:
+    out = _run_cli("get-run-progress", "--run-id", str(run_id), db=db)
+    return json.loads(out)

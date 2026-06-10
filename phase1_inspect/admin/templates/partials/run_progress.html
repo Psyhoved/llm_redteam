@@ -1,0 +1,14 @@
+{% if progress.stale %}
+<div class="banner banner-warn">Screen-сессия не найдена — прогон возможно завис или завершился без записи в БД.</div>
+{% endif %}
+{% if progress.current_benchmark %}
+<p class="muted">Текущий бенчмарк: <strong>{{ progress.current_benchmark }}</strong></p>
+{% endif %}
+{% if progress.samples_done is not none and progress.samples_total %}
+<div class="progress-wrap">
+  <div class="progress-bar" style="width: {{ (100 * progress.samples_done / progress.samples_total) | round(1) }}%"></div>
+</div>
+<p class="muted progress-label">{{ progress.samples_done }} / {{ progress.samples_total }} samples</p>
+{% elif progress.samples_done is not none %}
+<p class="muted progress-label">{{ progress.samples_done }} samples completed</p>
+{% endif %}
