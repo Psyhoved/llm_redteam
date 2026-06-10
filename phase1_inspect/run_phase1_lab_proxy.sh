@@ -8,8 +8,13 @@ ENV_FILE="$ROOT_DIR/.env"
 PYTHON_BIN="$SCRIPT_DIR/.venv/bin/python"
 
 LAB_KEY="${1:-}"
-LIMIT="${2:-}"
+CLI_SAMPLE_LIMIT="${2:-}"
 AYA_LANG="${3:-}"
+
+# Preserve CLI/admin overrides before sourcing .env (set -a would overwrite them).
+_OVERRIDE_TARGET_MODEL="${TARGET_MODEL:-}"
+_OVERRIDE_GRADER_MODEL="${GRADER_MODEL:-}"
+_OVERRIDE_MAX_CONNECTIONS="${PHASE1_MAX_CONNECTIONS:-}"
 
 if [[ -z "$LAB_KEY" ]]; then
   echo "Usage: ./run_phase1_lab_proxy.sh <lab_key> [limit] [aya_lang]" >&2
@@ -31,6 +36,17 @@ set -a
 # shellcheck disable=SC1090
 source "$ENV_FILE"
 set +a
+
+# CLI and admin env overrides take priority over .env defaults.
+if [[ -n "$_OVERRIDE_TARGET_MODEL" ]]; then
+  TARGET_MODEL="$_OVERRIDE_TARGET_MODEL"
+fi
+if [[ -n "$_OVERRIDE_GRADER_MODEL" ]]; then
+  GRADER_MODEL="$_OVERRIDE_GRADER_MODEL"
+fi
+if [[ -n "$_OVERRIDE_MAX_CONNECTIONS" ]]; then
+  PHASE1_MAX_CONNECTIONS="$_OVERRIDE_MAX_CONNECTIONS"
+fi
 
 # Keep launcher behavior predictable: always use repo-local datasets.
 DATASETS_ROOT="$SCRIPT_DIR/datasets"
@@ -130,8 +146,9 @@ args=(
   --max-connections "$PHASE1_MAX_CONNECTIONS"
 )
 
-if [[ -n "$LIMIT" ]]; then
-  args+=(--limit "$LIMIT")
+if [[ -n "$CLI_SAMPLE_LIMIT" ]]; then
+  echo "Effective sample limit: $CLI_SAMPLE_LIMIT (from CLI)"
+  args+=(--limit "$CLI_SAMPLE_LIMIT")
 fi
 
 cd "$SCRIPT_DIR"
