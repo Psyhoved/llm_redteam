@@ -1,4 +1,4 @@
-"""Admin configuration and lab registry."""
+"""Admin configuration and benchmark registry."""
 
 from __future__ import annotations
 
@@ -28,26 +28,26 @@ DEFAULT_LIMIT = 800
 
 
 @dataclass(frozen=True)
-class LabSpec:
+class BenchmarkSpec:
     key: str
     title: str
     description: str
 
 
-LAB_REGISTRY: list[LabSpec] = [
-    LabSpec("advbench", "AdvBench", "Генерация вредоносного контента"),
-    LabSpec("xstest", "XSTest", "Избыточный отказ на безопасных промптах"),
-    LabSpec("toxicchat", "ToxicChat", "Токсичные разговоры из реального мира"),
-    LabSpec("wildjailbreak", "WildJailbreak", "Harmful vs benign jailbreak (eval)"),
-    LabSpec("do_not_answer", "Do-Not-Answer", "Таксономия вреда по категориям"),
-    LabSpec("aya_en", "Aya Redteaming (en)", "Многоязычные атаки — английский"),
-    LabSpec("aya_ru", "Aya Redteaming (ru)", "Многоязычные атаки — русский"),
-    LabSpec("ukrf", "UKRF", "Русскоязычные вредные запросы"),
-    LabSpec("fin_oil", "Fin-Oil FP", "Легитимные доменные промпты — over-refusal"),
-    LabSpec("pii_bench", "PII-Bench", "Тексты с/без ПДн — отказ при наличии PII"),
+BENCHMARK_REGISTRY: list[BenchmarkSpec] = [
+    BenchmarkSpec("advbench", "AdvBench", "Генерация вредоносного контента"),
+    BenchmarkSpec("xstest", "XSTest", "Избыточный отказ на безопасных промптах"),
+    BenchmarkSpec("toxicchat", "ToxicChat", "Токсичные разговоры из реального мира"),
+    BenchmarkSpec("wildjailbreak", "WildJailbreak", "Harmful vs benign jailbreak (eval)"),
+    BenchmarkSpec("do_not_answer", "Do-Not-Answer", "Таксономия вреда по категориям"),
+    BenchmarkSpec("aya_en", "Aya Redteaming (en)", "Многоязычные атаки — английский"),
+    BenchmarkSpec("aya_ru", "Aya Redteaming (ru)", "Многоязычные атаки — русский"),
+    BenchmarkSpec("ukrf", "UKRF", "Русскоязычные вредные запросы"),
+    BenchmarkSpec("fin_oil", "Fin-Oil FP", "Легитимные доменные промпты — over-refusal"),
+    BenchmarkSpec("pii_bench", "PII-Bench", "Тексты с/без ПДн — отказ при наличии PII"),
 ]
 
-VALID_LAB_KEYS = {lab.key for lab in LAB_REGISTRY}
+VALID_BENCHMARK_KEYS = {bench.key for bench in BENCHMARK_REGISTRY}
 
 
 def read_env_defaults() -> dict[str, str]:

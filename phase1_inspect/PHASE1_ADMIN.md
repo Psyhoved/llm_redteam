@@ -44,7 +44,7 @@ screen -r phase1_admin
 
 ### Новый прогон (`/`)
 
-- Все лабы или выбранный набор (10 лаб)
+- Все бенчмарки или выбранный набор (10 бенчмарков)
 - Limit с пресетами (1 / 10 / 50 / 800)
 - Отложенный старт по MSK (`-a` для orchestrator)
 - Overrides: `TARGET_MODEL`, `GRADER_MODEL`, `PHASE1_MAX_CONNECTIONS` (без правки `.env`)
@@ -54,11 +54,11 @@ screen -r phase1_admin
 
 ### Прогоны (`/runs`)
 
-История из `logs/phase1_runs.sqlite`: статус, limit, число успешных лаб.
+История из `logs/phase1_runs.sqlite`: статус, limit, число успешных бенчмарков.
 
 ### Детали прогона (`/runs/{id}`)
 
-- Статус каждой лабы и путь к `.eval`
+- Статус каждого бенчмарка и путь к `.eval`
 - Live tail screen-лога (HTMX polling)
 - Кнопка сборки `reports/phase1_metrics/run_<id>/report.html`
 - Инструкция для Inspect view
@@ -72,9 +72,7 @@ screen -r phase1_admin
 cd ~/llm_redteam/phase1_inspect
 source .venv/bin/activate
 screen -dmS inspect_view bash -lc '
-  python -m inspect_ai view start \
-    --host 0.0.0.0 --port 7575 \
-    --log-dir . --recursive
+  python -m inspect_ai view start     --host 0.0.0.0 --port 7575     --log-dir . --recursive
 '
 
 # локально
@@ -85,8 +83,8 @@ ssh -L 7575:127.0.0.1:7575 administrator@<SERVER_IP>
 ## CLI (без UI)
 
 ```bash
-# выбранные лабы
-./run_phase1_all_proxy.sh 50 --labs advbench,xstest,fin_oil
+# выбранные бенчмарки
+./run_phase1_all_proxy.sh 50 --benchmarks advbench,xstest,fin_oil
 
 # список прогонов
 python scripts/phase1_log.py list-runs --db logs/phase1_runs.sqlite

@@ -6,17 +6,17 @@
 
 <form method="post" action="/api/runs" class="card">
   <div class="field">
-    <label>Режим лаб</label>
+    <label>Режим бенчмарков</label>
     <div class="mode-row">
-      <label><input type="radio" name="mode" value="all" checked data-mode-radio> Все лабы (10)</label>
-      <label><input type="radio" name="mode" value="selected" data-mode-radio> Выбранные лабы</label>
+      <label><input type="radio" name="mode" value="all" checked data-mode-radio> Все бенчмарки (10)</label>
+      <label><input type="radio" name="mode" value="selected" data-mode-radio> Выбранные бенчмарки</label>
     </div>
-    <div id="lab-picker" class="hidden lab-grid">
-      {% for lab in labs %}
-      <div class="lab-item">
+    <div id="benchmark-picker" class="hidden benchmark-grid">
+      {% for bench in benchmarks %}
+      <div class="benchmark-item">
         <label>
-          <input type="checkbox" name="labs" value="{{ lab.key }}">
-          <span>{{ lab.title }}<small>{{ lab.description }}</small></span>
+          <input type="checkbox" name="benchmarks" value="{{ bench.key }}">
+          <span>{{ bench.title }}<small>{{ bench.description }}</small></span>
         </label>
       </div>
       {% endfor %}
@@ -25,7 +25,7 @@
 
   <div class="grid-2">
     <div class="field">
-      <label for="limit">Limit (сэмплов на лабу)</label>
+      <label for="limit">Limit (сэмплов на бенчмарк)</label>
       <input type="number" id="limit" name="limit" min="1" value="{{ default_limit }}" required>
       <div class="preset-row">
         {% for label, value in limit_presets %}
@@ -67,13 +67,13 @@
 {% block scripts %}
 <script>
   const modeRadios = document.querySelectorAll('[data-mode-radio]');
-  const labPicker = document.getElementById('lab-picker');
-  function syncLabPicker() {
+  const benchmarkPicker = document.getElementById('benchmark-picker');
+  function syncBenchmarkPicker() {
     const selected = document.querySelector('[data-mode-radio]:checked')?.value === 'selected';
-    labPicker.classList.toggle('hidden', !selected);
+    benchmarkPicker.classList.toggle('hidden', !selected);
   }
-  modeRadios.forEach(r => r.addEventListener('change', syncLabPicker));
-  syncLabPicker();
+  modeRadios.forEach(r => r.addEventListener('change', syncBenchmarkPicker));
+  syncBenchmarkPicker();
 
   document.querySelectorAll('[data-limit]').forEach(btn => {
     btn.addEventListener('click', () => {

@@ -16,14 +16,14 @@ from admin.config import (
     LAUNCH_META_DIR,
     LOGS_DIR,
     PHASE1_DIR,
-    VALID_LAB_KEYS,
+    VALID_BENCHMARK_KEYS,
 )
 
 
 @dataclass
 class LaunchRequest:
     limit: int
-    labs: list[str] | None  # None = all labs
+    benchmarks: list[str] | None  # None = all benchmarks
     at_moscow: str | None
     screen_session: str
     target_model: str | None
@@ -61,12 +61,12 @@ def default_session_name() -> str:
 def validate_launch(req: LaunchRequest) -> None:
     if req.limit < 1:
         raise LaunchError("limit must be at least 1")
-    if req.labs is not None:
-        if not req.labs:
-            raise LaunchError("select at least one lab")
-        unknown = [k for k in req.labs if k not in VALID_LAB_KEYS]
+    if req.benchmarks is not None:
+        if not req.benchmarks:
+            raise LaunchError("select at least one benchmark")
+        unknown = [k for k in req.benchmarks if k not in VALID_BENCHMARK_KEYS]
         if unknown:
-            raise LaunchError(f"unknown lab keys: {', '.join(unknown)}")
+            raise LaunchError(f"unknown benchmark keys: {', '.join(unknown)}")
     if req.max_connections is not None and req.max_connections < 1:
         raise LaunchError("max_connections must be at least 1")
     req.screen_session = _sanitize_session(req.screen_session)
@@ -87,8 +87,8 @@ def screen_session_exists(name: str) -> bool:
 
 def build_orchestrator_args(req: LaunchRequest) -> list[str]:
     args = [str(req.limit)]
-    if req.labs is not None:
-        args.extend(["--labs", ",".join(req.labs)])
+    if req.benchmarks is not None:
+        args.extend(["--benchmarks", ",".join(req.benchmarks)])
     if req.at_moscow:
         args.extend(["-a", req.at_moscow])
     return args
@@ -110,7 +110,10 @@ def load_launch_meta(session: str) -> dict[str, Any] | None:
     path = LAUNCH_META_DIR / f"{session}.json"
     if not path.is_file():
         return None
-    return json.loads(path.read_text(encoding="utf-8"))
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if "benchmarks" not in data and "labs" in data:
+        data["benchmarks"] = data["labs"]
+    return data
 
 
 def find_launch_meta_by_run_id(run_id: int) -> dict[str, Any] | None:
@@ -122,6 +125,8 @@ def find_launch_meta_by_run_id(run_id: int) -> dict[str, Any] | None:
         except json.JSONDecodeError:
             continue
         if data.get("run_id") == run_id:
+            if "benchmarks" not in data and "labs" in data:
+                data["benchmarks"] = data["labs"]
             return data
     return None
 
@@ -170,7 +175,7 @@ def launch(req: LaunchRequest) -> LaunchResult:
         "screen_log": str(screen_log_path) if screen_log_path else None,
         "started_at": _iso_now(),
         "limit": req.limit,
-        "labs": req.labs,
+        "benchmarks": req.benchmarks,
         "at_moscow": req.at_moscow,
         "target_model": req.target_model,
         "grader_model": req.grader_model,

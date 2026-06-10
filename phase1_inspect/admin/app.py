@@ -20,11 +20,11 @@ app = FastAPI(title="Phase 1 Admin", version="0.1.0")
 app.mount("/static", StaticFiles(directory=str(APP_DIR / "static")), name="static")
 
 
-def _parse_labs(mode: str, selected: list[str] | None) -> list[str] | None:
+def _parse_benchmarks(mode: str, selected: list[str] | None) -> list[str] | None:
     if mode == "all":
         return None
     if not selected:
-        raise HTTPException(status_code=400, detail="select at least one lab")
+        raise HTTPException(status_code=400, detail="select at least one benchmark")
     return selected
 
 
@@ -60,7 +60,7 @@ async def new_run_form(request: Request) -> HTMLResponse:
         request,
         "new_run.html",
         {
-            "labs": config.LAB_REGISTRY,
+            "benchmarks": config.BENCHMARK_REGISTRY,
             "limit_presets": config.LIMIT_PRESETS,
             "default_limit": config.DEFAULT_LIMIT,
             "default_session": runner.default_session_name(),
@@ -147,6 +147,7 @@ async def api_pending_status(screen_session: str) -> JSONResponse:
 async def api_create_run(
     limit: int = Form(...),
     mode: str = Form("all"),
+    benchmarks: list[str] | None = Form(None),
     labs: list[str] | None = Form(None),
     at_moscow: str = Form(""),
     screen_session: str = Form(...),
@@ -155,11 +156,12 @@ async def api_create_run(
     max_connections: str = Form(""),
 ) -> RedirectResponse:
     try:
-        selected_labs = _parse_labs(mode, labs)
+        selected = benchmarks if benchmarks else labs
+        selected_benchmarks = _parse_benchmarks(mode, selected)
         max_conn = int(max_connections) if max_connections.strip() else None
         req = runner.LaunchRequest(
             limit=limit,
-            labs=selected_labs,
+            benchmarks=selected_benchmarks,
             at_moscow=at_moscow.strip() or None,
             screen_session=screen_session.strip() or runner.default_session_name(),
             target_model=target_model.strip() or None,

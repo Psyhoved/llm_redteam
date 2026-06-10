@@ -11,7 +11,7 @@
 {% if meta %}
 <div class="card">
   <p>Limit: <strong>{{ meta.limit }}</strong></p>
-  <p>Labs: <strong>{% if meta.labs %}{{ meta.labs | join(', ') }}{% else %}все{% endif %}</strong></p>
+  <p>Бенчмарки: <strong>{% if meta.benchmarks %}{{ meta.benchmarks | join(', ') }}{% elif meta.labs %}{{ meta.labs | join(', ') }}{% else %}все{% endif %}</strong></p>
 </div>
 {% endif %}
 

@@ -118,20 +118,20 @@ input[type="datetime-local"] {
   cursor: pointer;
 }
 
-.lab-grid {
+.benchmark-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 0.75rem;
 }
 
-.lab-item {
+.benchmark-item {
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 0.65rem 0.75rem;
   background: #0c1118;
 }
 
-.lab-item label {
+.benchmark-item label {
   display: flex;
   gap: 0.5rem;
   align-items: flex-start;
@@ -139,7 +139,7 @@ input[type="datetime-local"] {
   cursor: pointer;
 }
 
-.lab-item small {
+.benchmark-item small {
   display: block;
   color: var(--muted);
   margin-left: 1.4rem;

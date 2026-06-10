@@ -19,7 +19,7 @@ DISABLE_LOG_DB=false
 DEFAULT_LOG_DB_REL="logs/phase1_runs.sqlite"
 RUN_ID=""
 SCREEN_SESSION="${PHASE1_SCREEN_SESSION:-}"
-LABS_FILTER=""
+BENCHMARKS_FILTER=""
 
 FULL_ARGV_JSON="[]"
 if [[ -n "$PYTHON_BIN" ]] && command -v -- "$PYTHON_BIN" >/dev/null 2>&1; then
@@ -30,22 +30,23 @@ usage() {
   cat <<EOF >&2
 Usage: ./run_phase1_all_proxy.sh [limit] [options]
 
-  limit                      Optional sample limit per lab (default: 800)
+  limit                      Optional sample limit per benchmark (default: 800)
   --at-moscow | -a "when"     Wait once until Moscow wall-clock time (GNU date, TZ=Europe/Moscow).
                               This is the normal way to schedule a deferred Phase 1 run.
                               Examples: "2026-05-11 03:00:00", "tomorrow 03:00"
   --no-log-db                 Disable SQLite logging (by default logs are written).
   --log-db PATH               Override default SQLite path (normally you do not need this).
   --sleep-before SECONDS      Optional extra sleep in seconds AFTER the MSK wait (rare/debug only).
-  --labs LIST                 Comma-separated lab keys to run (default: all).
+  --benchmarks LIST           Comma-separated benchmark keys to run (default: all).
                               Keys: advbench,xstest,toxicchat,wildjailbreak,do_not_answer,
                               aya_en,aya_ru,ukrf,fin_oil,pii_bench
+  --labs LIST                 Deprecated alias for --benchmarks.
 
 Examples:
   ./run_phase1_all_proxy.sh 2 -a "2026-05-15 03:00:00"
   ./run_phase1_all_proxy.sh 50 --at-moscow "2026-05-11 03:00:00"
   ./run_phase1_all_proxy.sh 200 -a "tomorrow 09:30"
-  ./run_phase1_all_proxy.sh 50 --labs advbench,xstest,fin_oil
+  ./run_phase1_all_proxy.sh 50 --benchmarks advbench,xstest,fin_oil
 
 Model / proxy / judge API (TARGET_MODEL, GRADER_MODEL, MYPROXY_*, OPENROUTER_API_KEY, etc.):
   Set in the repo root .env (see run_phase1_lab_proxy.sh and run_*_proxy.sh). No need to pass them on this command line.
@@ -56,7 +57,7 @@ SQLite (MVP, automatic):
   Override path: env PHASE1_LOG_DB, or flag --log-db PATH. Disable: --no-log-db.
 
 Notes:
-  - Failure policy is continue-and-report (one failing lab does not abort the rest — e.g. missing wildjailbreak data).
+  - Failure policy is continue-and-report (one failing benchmark does not abort the rest — e.g. missing wildjailbreak data).
   - If both --at-moscow and --sleep-before are set, MSK wait runs first, then the extra sleep.
 EOF
   exit "${1:-0}"
@@ -87,21 +88,21 @@ json_field() {
   "$PYTHON_BIN" -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get(sys.argv[2], ""))' "$json_file" "$field"
 }
 
-VALID_LAB_KEYS=(
+VALID_BENCHMARK_KEYS=(
   advbench xstest toxicchat wildjailbreak do_not_answer
   aya_en aya_ru ukrf fin_oil pii_bench
 )
 
-validate_labs_filter() {
+validate_benchmarks_filter() {
   local key
   local -a requested=()
   local -a invalid=()
-  IFS=',' read -ra requested <<<"$LABS_FILTER"
+  IFS=',' read -ra requested <<<"$BENCHMARKS_FILTER"
   for key in "${requested[@]}"; do
     key="${key// /}"
     [[ -z "$key" ]] && continue
     local found=0
-    for valid in "${VALID_LAB_KEYS[@]}"; do
+    for valid in "${VALID_BENCHMARK_KEYS[@]}"; do
       if [[ "$key" == "$valid" ]]; then
         found=1
         break
@@ -112,21 +113,21 @@ validate_labs_filter() {
     fi
   done
   if [[ ${#invalid[@]} -gt 0 ]]; then
-    echo "Error: unknown lab key(s): ${invalid[*]}" >&2
-    echo "Valid keys: ${VALID_LAB_KEYS[*]}" >&2
+    echo "Error: unknown benchmark key(s): ${invalid[*]}" >&2
+    echo "Valid keys: ${VALID_BENCHMARK_KEYS[*]}" >&2
     exit 1
   fi
   if [[ ${#requested[@]} -eq 0 ]]; then
-    echo "Error: --labs requires at least one lab key" >&2
+    echo "Error: --benchmarks requires at least one benchmark key" >&2
     exit 1
   fi
 }
 
-lab_in_filter() {
+benchmark_in_filter() {
   local name="$1"
-  [[ -z "$LABS_FILTER" ]] && return 0
+  [[ -z "$BENCHMARKS_FILTER" ]] && return 0
   local key
-  IFS=',' read -ra keys <<<"$LABS_FILTER"
+  IFS=',' read -ra keys <<<"$BENCHMARKS_FILTER"
   for key in "${keys[@]}"; do
     key="${key// /}"
     [[ "$key" == "$name" ]] && return 0
@@ -152,8 +153,13 @@ while (($#)); do
       DISABLE_LOG_DB=true
       shift
       ;;
+    --benchmarks)
+      if [[ ${2+x} ]]; then BENCHMARKS_FILTER="$2"; else echo "Error: missing value after --benchmarks" >&2; usage 2; fi
+      shift 2
+      ;;
     --labs)
-      if [[ ${2+x} ]]; then LABS_FILTER="$2"; else echo "Error: missing value after --labs" >&2; usage 2; fi
+      echo "Warning: --labs is deprecated; use --benchmarks instead" >&2
+      if [[ ${2+x} ]]; then BENCHMARKS_FILTER="$2"; else echo "Error: missing value after --labs" >&2; usage 2; fi
       shift 2
       ;;
     -h | --help)
@@ -171,8 +177,8 @@ while (($#)); do
   esac
 done
 
-if [[ -n "$LABS_FILTER" ]]; then
-  validate_labs_filter
+if [[ -n "$BENCHMARKS_FILTER" ]]; then
+  validate_benchmarks_filter
 fi
 
 if [[ -n "$AT_MOSCOW" ]]; then
@@ -187,7 +193,7 @@ if [[ -n "$SLEEP_BEFORE_SEC" ]]; then
   if [[ -n "$AT_MOSCOW" ]]; then
     echo "Extra delay: ${SLEEP_BEFORE_SEC}s (--sleep-before) after reaching MSK schedule time..."
   else
-    echo "Sleeping ${SLEEP_BEFORE_SEC}s (--sleep-before) before labs..."
+    echo "Sleeping ${SLEEP_BEFORE_SEC}s (--sleep-before) before benchmarks..."
   fi
   sleep "$SLEEP_BEFORE_SEC"
 fi
@@ -264,18 +270,18 @@ fi
 if [[ -n "$LOG_DB" ]]; then
   echo "SQLite log DB: $LOG_DB (run_id=$RUN_ID)"
 fi
-if [[ -n "$LABS_FILTER" ]]; then
-  echo "Lab filter: $LABS_FILTER"
+if [[ -n "$BENCHMARKS_FILTER" ]]; then
+  echo "Benchmark filter: $BENCHMARKS_FILTER"
 fi
-echo "Failure policy: continue-and-report — one failing lab (e.g. wildjailbreak without data) does not stop the remaining labs."
+echo "Failure policy: continue-and-report — one failing benchmark (e.g. wildjailbreak without data) does not stop the remaining benchmarks."
 echo
 
 for run_spec in "${RUNS[@]}"; do
   name="${run_spec%%|*}"
   cmd="${run_spec#*|}"
 
-  if ! lab_in_filter "$name"; then
-    echo "=== SKIP: $name (not in --labs filter) ==="
+  if ! benchmark_in_filter "$name"; then
+    echo "=== SKIP: $name (not in --benchmarks filter) ==="
     echo
     continue
   fi
