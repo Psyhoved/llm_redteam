@@ -15,6 +15,22 @@
 - **Solver** — как генерировать ответ (обычно `generate()`)
 - **Scorer** — как оценивать ответ (мы используем `model_graded_qa()`, который может судить либо той же моделью, либо отдельной judge-моделью)
 
+## Админка (запуск прогонов)
+
+Веб-UI для настройки и запуска Phase 1 benchmark runs без ручного bash/screen:
+
+```bash
+cd phase1_inspect
+uv venv                    # если .venv ещё нет
+source .venv/bin/activate
+uv pip install -r requirements.txt
+./run_phase1_admin.sh
+```
+
+Доступ с локальной машины: `ssh -L 8080:127.0.0.1:8080 user@server` → http://127.0.0.1:8080
+
+Подробности: [PHASE1_ADMIN.md](PHASE1_ADMIN.md)
+
 ## С чего начать
 
 Если `Inspect AI` для тебя новый, сначала открой [INSPECT_AI_GUIDE.md](INSPECT_AI_GUIDE.md).
