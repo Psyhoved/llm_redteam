@@ -12,7 +12,7 @@
       <label><input type="radio" name="mode" value="selected" data-mode-radio> Выбранные бенчмарки</label>
     </div>
     <div id="benchmark-picker" class="hidden benchmark-grid">
-      {% for bench in benchmarks %}
+      {% for bench in benchmarks or labs or [] %}
       <div class="benchmark-item">
         <label>
           <input type="checkbox" name="benchmarks" value="{{ bench.key }}">

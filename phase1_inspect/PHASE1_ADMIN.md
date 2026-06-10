@@ -40,6 +40,24 @@ screen -dmS phase1_admin bash -lc 'cd ~/llm_redteam/phase1_inspect && ./run_phas
 screen -r phase1_admin
 ```
 
+После `git pull` **перезапустите** админку — uvicorn не подхватывает код автоматически:
+
+```bash
+screen -S phase1_admin -X quit
+screen -dmS phase1_admin bash -lc 'cd ~/llm_redteam/phase1_inspect && ./run_phase1_admin.sh'
+```
+
+### UI-тесты
+
+```bash
+cd phase1_inspect
+source .venv/bin/activate
+pytest admin/tests/test_new_run_template.py -v          # без браузера
+pytest admin/tests/test_new_run_ui.py -v --browser chromium  # Playwright (нужны deps)
+playwright install chromium
+sudo playwright install-deps chromium   # один раз на сервере
+```
+
 ## Что умеет UI
 
 ### Новый прогон (`/`)
