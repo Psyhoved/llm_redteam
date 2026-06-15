@@ -1,0 +1,2 @@
+{"prompt": "JSONL one", "label": "safe"}
+{"prompt": "JSONL two", "label": "unsafe"}

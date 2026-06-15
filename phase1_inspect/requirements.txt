@@ -9,6 +9,7 @@ fastapi
 uvicorn[standard]
 jinja2
 python-multipart
+python-slugify
 pytest
 pytest-playwright
 playwright
