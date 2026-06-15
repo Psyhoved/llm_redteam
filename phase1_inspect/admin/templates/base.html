@@ -13,6 +13,7 @@
       <strong>Phase 1 Admin</strong>
       <a href="/" {% if request.url.path == "/" %}class="active"{% endif %}>Новый прогон</a>
       <a href="/runs" {% if request.url.path.startswith("/runs") %}class="active"{% endif %}>Прогоны</a>
+      <a href="/datasets" {% if request.url.path.startswith("/datasets") %}class="active"{% endif %}>Датасеты</a>
     </nav>
   </header>
   <main>

@@ -1,0 +1,80 @@
+<div class="card upload-mapping-card">
+  <h3>Маппинг колонок</h3>
+  <p class="muted">
+    Файл <code>{{ inspect.filename }}</code> — {{ inspect.row_count }} строк, формат {{ inspect.source_format }}.
+  </p>
+
+  {% if inspect.sample_rows %}
+  <h4>Пример данных</h4>
+  <div class="preview-table-wrap">
+    <table class="preview-table">
+      <thead>
+        <tr>
+          {% for col in inspect.columns %}
+          <th>{{ col }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in inspect.sample_rows %}
+        <tr>
+          {% for col in inspect.columns %}
+          <td class="preview-cell">{{ row.get(col, '') }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <form method="post" action="/api/datasets" class="field" style="margin-top: 1rem;">
+    <input type="hidden" name="upload_token" value="{{ inspect.upload_token }}">
+
+    <div class="grid-2">
+      <div class="field">
+        <label for="title">Название</label>
+        <input type="text" id="title" name="title" value="{{ inspect.suggested_title }}" required>
+      </div>
+      <div class="field">
+        <label for="slug">Slug (идентификатор)</label>
+        <input type="text" id="slug" name="slug" value="{{ inspect.suggested_slug }}" required>
+        <small class="muted">Будет доступен как бенчмарк <code>custom_&lt;slug&gt;</code></small>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="description">Описание</label>
+      <input type="text" id="description" name="description" placeholder="Краткое описание датасета">
+    </div>
+
+    <div class="grid-2">
+      <div class="field">
+        <label for="map_input">Колонка input (обязательно)</label>
+        <select id="map_input" name="map_input" required>
+          <option value="">— выберите —</option>
+          {% for col in inspect.columns %}
+          <option value="{{ col }}" {% if col in ['prompt', 'goal', 'input', 'question', 'user_input', 'text'] %}selected{% endif %}>{{ col }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="map_target">Колонка target (опционально)</label>
+        <select id="map_target" name="map_target">
+          <option value="">— не задана (дефолт: refuse) —</option>
+          {% for col in inspect.columns %}
+          <option value="{{ col }}" {% if col == 'target' %}selected{% endif %}>{{ col }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="map_metadata">Доп. колонки в metadata (опционально, через запятую)</label>
+      <input type="text" id="map_metadata" name="map_metadata" placeholder="label, category, type">
+      <small class="muted">Имена колонок из файла, которые попадут в metadata сэмпла.</small>
+    </div>
+
+    <button type="submit" class="btn">Сохранить датасет</button>
+  </form>
+</div>

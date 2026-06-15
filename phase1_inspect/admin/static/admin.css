@@ -163,6 +163,29 @@ input[type="datetime-local"] {
   color: var(--text);
 }
 
+.btn-danger {
+  background: var(--fail);
+  color: #fff;
+}
+
+.btn-danger:hover {
+  filter: brightness(1.05);
+}
+
+.btn-sm {
+  padding: 0.3rem 0.65rem;
+  font-size: 0.85rem;
+  margin-left: 0.5rem;
+}
+
+.inline-form {
+  display: inline;
+}
+
+.card-danger {
+  border-color: rgba(248, 113, 113, 0.35);
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -299,4 +322,89 @@ td {
   border-radius: 6px;
   margin-top: 0.75rem;
   background: #0c1118;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.badge-builtin {
+  background: rgba(61, 139, 253, 0.15);
+  color: var(--accent);
+}
+
+.badge-custom {
+  background: rgba(61, 214, 140, 0.15);
+  color: var(--ok);
+}
+
+.benchmark-custom {
+  border-color: rgba(61, 214, 140, 0.35);
+}
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 0.5rem 1rem;
+  margin: 0;
+}
+
+.meta-grid dt {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.meta-grid dd {
+  margin: 0;
+}
+
+.preview-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.preview-table {
+  font-size: 0.85rem;
+  min-width: 100%;
+}
+
+.preview-table th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  white-space: nowrap;
+}
+
+.preview-cell {
+  max-width: 320px;
+  word-break: break-word;
+  vertical-align: top;
+}
+
+.upload-mapping-card h3,
+.upload-mapping-card h4 {
+  margin-top: 0;
+}
+
+input[type="file"],
+select,
+textarea {
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: #0c1118;
+  color: var(--text);
+}
+
+select {
+  cursor: pointer;
 }

@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}{{ dataset.title }} — Датасеты{% endblock %}
+{% block content %}
+<p><a href="/datasets">← Все датасеты</a></p>
+<h1>{{ dataset.title }}</h1>
+<p class="muted">{{ dataset.description }}</p>
+
+<div class="card">
+  <dl class="meta-grid">
+    <dt>ID</dt><dd><code>{{ dataset.id }}</code></dd>
+    <dt>Тип</dt><dd><span class="badge badge-{{ dataset.kind }}">{{ dataset.kind }}</span></dd>
+    <dt>Формат</dt><dd><code>{{ dataset.format }}</code></dd>
+    <dt>Строк</dt><dd>{% if preview.row_count is not none %}{{ preview.row_count }}{% else %}—{% endif %}</dd>
+    {% if dataset.benchmark_key %}
+    <dt>Benchmark key</dt><dd><code>{{ dataset.benchmark_key }}</code></dd>
+    {% endif %}
+    {% if dataset.column_mapping %}
+    <dt>Маппинг</dt>
+    <dd>
+      <code>input</code> → <code>{{ dataset.column_mapping.get('input') }}</code>
+      {% if dataset.column_mapping.get('target') %},
+      <code>target</code> → <code>{{ dataset.column_mapping.get('target') }}</code>
+      {% endif %}
+      {% if dataset.column_mapping.get('metadata_columns') %},
+      metadata: {% for col in dataset.column_mapping.get('metadata_columns') %}<code>{{ col }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+      {% endif %}
+    </dd>
+    {% endif %}
+  </dl>
+</div>
+
+<div class="card">
+  <h2>Предпросмотр{% if preview.limit %} (первые {{ preview.rows|length }} из {{ preview.row_count or '?' }}){% endif %}</h2>
+  {% if preview.error %}
+  <p class="banner banner-warn">{{ preview.error }}</p>
+  {% elif preview.rows %}
+  <div class="preview-table-wrap">
+    <table class="preview-table">
+      <thead>
+        <tr>
+          {% for col in preview.columns %}
+          <th>{{ col }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in preview.rows %}
+        <tr>
+          {% for col in preview.columns %}
+          <td class="preview-cell">{{ row.get(col, '') }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">Нет данных для предпросмотра.</p>
+  {% endif %}
+</div>
+
+{% if dataset.kind == "custom" and dataset.slug %}
+<div class="card card-danger">
+  <h2>Удаление</h2>
+  <p class="muted">Датасет будет удалён с диска и исчезнет из списка бенчмарков. Встроенные датасеты удалить нельзя.</p>
+  <form method="post" action="/api/datasets/{{ dataset.id }}/delete"
+        onsubmit="return confirm('Удалить датасет «{{ dataset.title }}»? Это действие необратимо.');">
+    <button type="submit" class="btn btn-danger">Удалить датасет</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

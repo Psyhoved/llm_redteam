@@ -6,14 +6,14 @@ import html
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 import asyncio
 
-from admin import config, db, inspect_view, runner
+from admin import config, datasets, db, inspect_view, runner
 
 APP_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(APP_DIR / "templates"))
@@ -195,13 +195,130 @@ async def new_run_form(request: Request) -> HTMLResponse:
         request,
         "new_run.html",
         {
-            "benchmarks": config.BENCHMARK_REGISTRY,
+            "benchmarks": config.all_benchmarks(),
             "limit_presets": config.LIMIT_PRESETS,
             "default_limit": config.DEFAULT_LIMIT,
             "default_session": runner.default_session_name(),
             "env_defaults": env_defaults,
         },
     )
+
+
+@app.get("/datasets", response_class=HTMLResponse)
+async def datasets_list(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "datasets.html",
+        {"datasets": datasets.list_datasets()},
+    )
+
+
+@app.get("/datasets/{dataset_id:path}", response_class=HTMLResponse)
+async def dataset_detail(request: Request, dataset_id: str) -> HTMLResponse:
+    try:
+        record = datasets.get_dataset(dataset_id)
+        preview = datasets.preview_dataset(dataset_id, limit=50)
+    except datasets.DatasetError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return templates.TemplateResponse(
+        request,
+        "dataset_detail.html",
+        {"dataset": record, "preview": preview},
+    )
+
+
+@app.get("/api/datasets/{dataset_id:path}/preview", response_model=None)
+async def api_dataset_preview(request: Request, dataset_id: str, limit: int = 50):
+    try:
+        preview = datasets.preview_dataset(dataset_id, limit=limit)
+    except datasets.DatasetError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if request.headers.get("accept", "").startswith("application/json"):
+        return JSONResponse(
+            {
+                "dataset_id": preview.dataset_id,
+                "columns": preview.columns,
+                "rows": preview.rows,
+                "row_count": preview.row_count,
+                "limit": preview.limit,
+            }
+        )
+    return templates.TemplateResponse(
+        request,
+        "partials/dataset_preview_table.html",
+        {"preview": preview},
+    )
+
+
+@app.post("/api/datasets/inspect-upload", response_model=None)
+async def api_inspect_dataset_upload(
+    request: Request,
+    dataset_file: UploadFile = File(...),
+):
+    content = await dataset_file.read()
+    filename = dataset_file.filename or "upload.csv"
+    try:
+        inspect_result = datasets.inspect_upload(content, filename)
+    except datasets.DatasetError as exc:
+        if request.headers.get("HX-Request"):
+            return HTMLResponse(
+                f'<p class="banner banner-warn">{html.escape(str(exc))}</p>',
+                status_code=400,
+            )
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return templates.TemplateResponse(
+        request,
+        "partials/dataset_upload_mapping.html",
+        {"inspect": inspect_result},
+    )
+
+
+@app.post("/api/datasets")
+async def api_create_dataset(
+    upload_token: str = Form(...),
+    title: str = Form(...),
+    slug: str = Form(...),
+    description: str = Form(""),
+    map_input: str = Form(...),
+    map_target: str = Form(""),
+    map_metadata: str = Form(""),
+) -> RedirectResponse:
+    try:
+        content, filename = datasets.consume_staged_upload(upload_token)
+    except datasets.DatasetError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    column_mapping: dict[str, str] = {"input": map_input.strip()}
+    if map_target.strip():
+        column_mapping["target"] = map_target.strip()
+
+    try:
+        record = datasets.save_custom_dataset(
+            content,
+            filename,
+            title=title,
+            description=description,
+            slug=slug,
+            column_mapping=column_mapping,
+            metadata_csv=map_metadata,
+        )
+    except datasets.DatasetConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except datasets.DatasetError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return RedirectResponse(url=f"/datasets/{record.id}", status_code=303)
+
+
+@app.post("/api/datasets/{dataset_id:path}/delete")
+async def api_delete_dataset(dataset_id: str) -> RedirectResponse:
+    try:
+        datasets.delete_custom_dataset(dataset_id)
+    except datasets.DatasetForbiddenError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except datasets.DatasetError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return RedirectResponse(url="/datasets", status_code=303)
 
 
 @app.get("/runs", response_class=HTMLResponse)

@@ -1,0 +1,24 @@
+{% if preview.rows %}
+<div class="preview-table-wrap">
+  <table class="preview-table">
+    <thead>
+      <tr>
+        {% for col in preview.columns %}
+        <th>{{ col }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in preview.rows %}
+      <tr>
+        {% for col in preview.columns %}
+        <td class="preview-cell">{{ row.get(col, '') }}</td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="muted">Нет данных.</p>
+{% endif %}

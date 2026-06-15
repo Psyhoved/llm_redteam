@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Датасеты — Phase 1 Admin{% endblock %}
+{% block content %}
+<h1>Датасеты</h1>
+<p class="muted">Встроенные наборы Phase 1 и пользовательские загрузки. Предпросмотр первых строк доступен для каждого датасета.</p>
+
+<div class="card">
+  <h2>Загрузить датасет</h2>
+  <p class="muted">Поддерживаются CSV, JSONL и XLSX (до 50 MB). После выбора файла укажите маппинг колонок.</p>
+  <form
+    id="dataset-upload-form"
+    hx-post="/api/datasets/inspect-upload"
+    hx-target="#upload-mapping-panel"
+    hx-swap="innerHTML"
+    hx-encoding="multipart/form-data"
+    class="field"
+  >
+    <label for="dataset_file">Файл</label>
+    <input type="file" id="dataset_file" name="dataset_file" accept=".csv,.jsonl,.json,.xlsx" required>
+    <button type="submit" class="btn" style="margin-top: 0.75rem;">Проверить файл</button>
+  </form>
+  <div id="upload-mapping-panel" class="nested-card"></div>
+  {% if upload_error %}
+  <p class="banner banner-warn">{{ upload_error }}</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Каталог</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Название</th>
+        <th>Тип</th>
+        <th>Формат</th>
+        <th>Строк</th>
+        <th>На диске</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for ds in datasets %}
+      <tr>
+        <td>
+          <strong>{{ ds.title }}</strong>
+          {% if ds.description %}
+          <br><small class="muted">{{ ds.description }}</small>
+          {% endif %}
+        </td>
+        <td><span class="badge badge-{{ ds.kind }}">{{ ds.kind }}</span></td>
+        <td><code>{{ ds.format }}</code></td>
+        <td>{% if ds.row_count is not none %}{{ ds.row_count }}{% else %}—{% endif %}</td>
+        <td>{% if ds.on_disk %}да{% else %}<span class="muted">нет</span>{% endif %}</td>
+        <td>
+          {% if ds.on_disk %}
+          <a href="/datasets/{{ ds.id }}">Предпросмотр</a>
+          {% else %}
+          <span class="muted">—</span>
+          {% endif %}
+          {% if ds.kind == "custom" and ds.slug %}
+          <form method="post" action="/api/datasets/{{ ds.id }}/delete" class="inline-form"
+                onsubmit="return confirm('Удалить датасет «{{ ds.title }}»? Это действие необратимо.');">
+            <button type="submit" class="btn btn-danger btn-sm">Удалить</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
