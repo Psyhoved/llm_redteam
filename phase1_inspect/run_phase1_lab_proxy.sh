@@ -18,7 +18,7 @@ _OVERRIDE_MAX_CONNECTIONS="${PHASE1_MAX_CONNECTIONS:-}"
 
 if [[ -z "$LAB_KEY" ]]; then
   echo "Usage: ./run_phase1_lab_proxy.sh <lab_key> [limit] [aya_lang]" >&2
-  echo "Lab keys: advbench, xstest, toxicchat, wildjailbreak, do_not_answer, aya, ukrf, fin_oil, pii_bench" >&2
+  echo "Lab keys: advbench, xstest, toxicchat, wildjailbreak, do_not_answer, aya, ukrf, fin_oil, pii_bench, custom" >&2
   exit 1
 fi
 
@@ -112,6 +112,14 @@ case "$LAB_KEY" in
   pii_bench)
     TASK_FILE="./labs/lab9_pii_bench/run.py"
     DATASET_PATH="$DATASETS_ROOT/pii_bench"
+    ;;
+  custom)
+    TASK_FILE="./labs/lab_custom/run.py"
+    if [[ -z "${CUSTOM_DATASET_SLUG:-}" ]]; then
+      echo "Error: CUSTOM_DATASET_SLUG is required for custom lab" >&2
+      exit 1
+    fi
+    DATASET_PATH="$DATASETS_ROOT/custom/${CUSTOM_DATASET_SLUG}/data.csv"
     ;;
   *)
     echo "Error: unknown lab_key '$LAB_KEY'" >&2

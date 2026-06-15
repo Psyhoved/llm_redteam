@@ -13,10 +13,10 @@
     </div>
     <div id="benchmark-picker" class="hidden benchmark-grid">
       {% for bench in benchmarks or labs or [] %}
-      <div class="benchmark-item">
+      <div class="benchmark-item{% if bench.key.startswith('custom_') %} benchmark-custom{% endif %}">
         <label>
           <input type="checkbox" name="benchmarks" value="{{ bench.key }}">
-          <span>{{ bench.title }}<small>{{ bench.description }}</small></span>
+          <span>{{ bench.title }}{% if bench.key.startswith('custom_') %} <span class="badge badge-custom">custom</span>{% endif %}<small>{{ bench.description }}</small></span>
         </label>
       </div>
       {% endfor %}

@@ -93,7 +93,24 @@ VALID_BENCHMARK_KEYS=(
   aya_en aya_ru ukrf fin_oil pii_bench
 )
 
+load_custom_benchmark_keys() {
+  if [[ -z "$PYTHON_BIN" ]] || ! command -v -- "$PYTHON_BIN" >/dev/null 2>&1; then
+    return 0
+  fi
+  local keys
+  keys=$(
+    cd "$SCRIPT_DIR" && "$PYTHON_BIN" -c 'from admin.datasets import custom_benchmark_keys; print(" ".join(custom_benchmark_keys()))' \
+      2>/dev/null || true
+  )
+  if [[ -n "$keys" ]]; then
+    # shellcheck disable=SC2206
+    local extra=($keys)
+    VALID_BENCHMARK_KEYS+=("${extra[@]}")
+  fi
+}
+
 validate_benchmarks_filter() {
+  load_custom_benchmark_keys
   local key
   local -a requested=()
   local -a invalid=()
@@ -252,6 +269,17 @@ declare -a RUNS=(
   "fin_oil|$SCRIPT_DIR/run_fin_oil_proxy.sh $LIMIT"
   "pii_bench|$SCRIPT_DIR/run_pii_bench_proxy.sh $LIMIT"
 )
+
+if [[ -n "$PYTHON_BIN" ]] && command -v -- "$PYTHON_BIN" >/dev/null 2>&1; then
+  while IFS= read -r custom_key; do
+    [[ -z "$custom_key" ]] && continue
+    custom_slug="${custom_key#custom_}"
+    RUNS+=("${custom_key}|$SCRIPT_DIR/run_custom_proxy.sh $LIMIT ${custom_slug}")
+  done < <(
+    cd "$SCRIPT_DIR" && "$PYTHON_BIN" -c 'from admin.datasets import custom_benchmark_keys; print("\n".join(custom_benchmark_keys()))' \
+      2>/dev/null || true
+  )
+fi
 
 declare -a FAILURES=()
 declare -a SUCCESSES=()

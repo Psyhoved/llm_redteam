@@ -16,7 +16,7 @@ from admin.config import (
     LAUNCH_META_DIR,
     LOGS_DIR,
     PHASE1_DIR,
-    VALID_BENCHMARK_KEYS,
+    valid_benchmark_keys,
 )
 
 
@@ -64,7 +64,7 @@ def validate_launch(req: LaunchRequest) -> None:
     if req.benchmarks is not None:
         if not req.benchmarks:
             raise LaunchError("select at least one benchmark")
-        unknown = [k for k in req.benchmarks if k not in VALID_BENCHMARK_KEYS]
+        unknown = [k for k in req.benchmarks if k not in valid_benchmark_keys()]
         if unknown:
             raise LaunchError(f"unknown benchmark keys: {', '.join(unknown)}")
     if req.max_connections is not None and req.max_connections < 1:

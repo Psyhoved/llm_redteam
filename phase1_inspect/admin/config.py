@@ -53,6 +53,39 @@ BENCHMARK_REGISTRY: list[BenchmarkSpec] = [
 VALID_BENCHMARK_KEYS = {bench.key for bench in BENCHMARK_REGISTRY}
 
 
+def custom_benchmark_specs() -> list[BenchmarkSpec]:
+    """Load user-uploaded datasets as runnable custom benchmarks."""
+    try:
+        from admin import datasets as datasets_mod
+
+        return [
+            BenchmarkSpec(
+                key=record.benchmark_key or f"custom_{record.slug}",
+                title=record.title,
+                description=f"{record.description} (пользовательский датасет)",
+            )
+            for record in datasets_mod.list_datasets()
+            if record.kind == "custom" and record.on_disk and record.benchmark_key
+        ]
+    except Exception:
+        return []
+
+
+def all_benchmarks() -> list[BenchmarkSpec]:
+    return [*BENCHMARK_REGISTRY, *custom_benchmark_specs()]
+
+
+def valid_benchmark_keys() -> set[str]:
+    keys = set(VALID_BENCHMARK_KEYS)
+    try:
+        from admin import datasets as datasets_mod
+
+        keys.update(datasets_mod.custom_benchmark_keys())
+    except Exception:
+        pass
+    return keys
+
+
 def read_env_defaults() -> dict[str, str]:
     """Read non-secret Phase 1 defaults from .env for form placeholders."""
     keys = ("TARGET_MODEL", "GRADER_MODEL", "PHASE1_MAX_CONNECTIONS")
