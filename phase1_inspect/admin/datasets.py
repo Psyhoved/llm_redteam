@@ -256,9 +256,18 @@ def _save_registry(registry: dict[str, Any]) -> None:
     )
 
 
+def _custom_dataset_on_disk(slug: str) -> bool:
+    custom_dir = CUSTOM_DIR / slug
+    return (custom_dir / "data.csv").is_file() and (custom_dir / "meta.json").is_file()
+
+
 def custom_benchmark_keys() -> list[str]:
     registry = _load_registry()
-    return [entry["benchmark_key"] for entry in registry.values() if entry.get("benchmark_key")]
+    return [
+        entry["benchmark_key"]
+        for slug, entry in registry.items()
+        if entry.get("benchmark_key") and _custom_dataset_on_disk(slug)
+    ]
 
 
 def custom_benchmark_slug(key: str) -> str | None:
@@ -297,10 +306,8 @@ def list_datasets() -> list[DatasetRecord]:
 
     registry = _load_registry()
     for slug, entry in sorted(registry.items()):
-        custom_dir = CUSTOM_DIR / slug
-        data_csv = custom_dir / "data.csv"
-        meta_path = custom_dir / "meta.json"
-        on_disk = data_csv.is_file() and meta_path.is_file()
+        meta_path = CUSTOM_DIR / slug / "meta.json"
+        on_disk = _custom_dataset_on_disk(slug)
         column_mapping = entry.get("column_mapping") or {}
         if on_disk and not column_mapping:
             try:

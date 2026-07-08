@@ -78,6 +78,7 @@ if ! [[ "$PHASE1_MAX_CONNECTIONS" =~ ^[1-9][0-9]*$ ]]; then
 fi
 
 TASK_FILE=""
+TASK_TARGET=""
 DATASET_PATH=""
 
 case "$LAB_KEY" in
@@ -131,6 +132,11 @@ case "$LAB_KEY" in
     ;;
 esac
 
+TASK_TARGET="$TASK_FILE"
+if [[ "$LAB_KEY" == "custom" ]]; then
+  TASK_TARGET="${TASK_FILE}@custom_${CUSTOM_DATASET_SLUG}"
+fi
+
 if [[ ! -f "$SCRIPT_DIR/${TASK_FILE#./}" ]]; then
   echo "Error: task file not found at $SCRIPT_DIR/${TASK_FILE#./}" >&2
   exit 1
@@ -151,7 +157,7 @@ if [[ "$LAB_KEY" == "aya" ]]; then
 fi
 
 args=(
-  -m inspect_ai eval "$TASK_FILE"
+  -m inspect_ai eval "$TASK_TARGET"
   --model "$TARGET_MODEL"
   --model-role "grader=$GRADER_MODEL"
   --display plain

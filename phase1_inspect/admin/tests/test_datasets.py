@@ -137,6 +137,28 @@ def test_upload_jsonl(isolated_custom_dir: Path) -> None:
     assert len(preview.rows) == 2
 
 
+def test_custom_benchmark_keys_skip_stale_registry_entries(isolated_custom_dir: Path) -> None:
+    content = (FIXTURES / "sample.csv").read_bytes()
+    datasets.save_custom_dataset(
+        content,
+        "sample.csv",
+        title="Live",
+        description="",
+        slug="live",
+        column_mapping={"input": "prompt"},
+    )
+    registry_path = isolated_custom_dir / "registry.json"
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    registry["missing"] = {
+        "title": "Missing",
+        "path": "missing",
+        "benchmark_key": "custom_missing",
+    }
+    registry_path.write_text(json.dumps(registry), encoding="utf-8")
+
+    assert datasets.custom_benchmark_keys() == ["custom_live"]
+
+
 def test_duplicate_slug_conflict(isolated_custom_dir: Path) -> None:
     content = (FIXTURES / "sample.csv").read_bytes()
     datasets.save_custom_dataset(
@@ -205,6 +227,15 @@ def test_runner_accepts_custom_benchmark(isolated_custom_dir: Path) -> None:
         max_connections=None,
     )
     validate_launch(req)
+
+
+def test_custom_launcher_targets_dynamic_inspect_task() -> None:
+    script = (Path(__file__).resolve().parents[2] / "run_phase1_lab_proxy.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'TASK_TARGET="${TASK_FILE}@custom_${CUSTOM_DATASET_SLUG}"' in script
+    assert '-m inspect_ai eval "$TASK_TARGET"' in script
 
 
 def test_datasets_page_renders() -> None:
