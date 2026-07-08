@@ -1,0 +1,29 @@
+<div class="hf-import-status status-{{ effective_status }}">
+  <p>
+    Статус:
+    <strong class="badge badge-{{ effective_status }}">{{ effective_status }}</strong>
+    {% if job.slug %} — slug <code>{{ job.slug }}</code>{% endif %}
+  </p>
+  {% if job.estimated_bytes %}
+  <p class="muted">Оценка размера: {{ job.estimated_bytes // (1024*1024) }} MB</p>
+  {% endif %}
+  {% if job.row_count %}
+  <p>Строк: <strong>{{ job.row_count }}</strong></p>
+  {% endif %}
+  {% if job.screen_session %}
+  <p class="muted">Screen: <code>{{ job.screen_session }}</code></p>
+  {% endif %}
+  {% if effective_status == 'done' and job.dataset_id %}
+  <p class="status-done">
+    <a href="/datasets/{{ job.dataset_id }}">Открыть датасет</a>
+    ·
+    <a href="/datasets">К каталогу</a>
+  </p>
+  {% elif effective_status == 'failed' %}
+  <p class="banner banner-warn">{{ job.error or 'import failed' }}</p>
+  {% elif effective_status == 'stale' %}
+  <p class="banner banner-warn">Screen-сессия завершилась неожиданно. Проверьте лог ниже.</p>
+  {% else %}
+  <p class="muted">Загрузка идёт в фоне — можно закрыть вкладку, job продолжится в screen.</p>
+  {% endif %}
+</div>

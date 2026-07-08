@@ -6,6 +6,8 @@ import html
 from pathlib import Path
 from typing import Any
 
+from urllib.parse import quote
+
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -13,7 +15,7 @@ from fastapi.templating import Jinja2Templates
 
 import asyncio
 
-from admin import config, datasets, db, inspect_view, runner
+from admin import config, datasets, db, hf_runner, inspect_view, runner
 
 APP_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(APP_DIR / "templates"))
@@ -205,11 +207,25 @@ async def new_run_form(request: Request) -> HTMLResponse:
 
 
 @app.get("/datasets", response_class=HTMLResponse)
-async def datasets_list(request: Request) -> HTMLResponse:
+async def datasets_list(request: Request, upload_error: str = "") -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "datasets.html",
-        {"datasets": datasets.list_datasets()},
+        {"datasets": datasets.list_datasets(), "upload_error": upload_error},
+    )
+
+
+@app.get("/datasets/import-jobs/{job_id}", response_class=HTMLResponse)
+async def hf_import_job_page(request: Request, job_id: str) -> HTMLResponse:
+    try:
+        job = datasets.load_import_job(job_id)
+    except datasets.DatasetError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    effective_status = datasets.resolve_import_job_status(job)
+    return templates.TemplateResponse(
+        request,
+        "hf_import_job.html",
+        {"job": job, "effective_status": effective_status},
     )
 
 
@@ -250,6 +266,45 @@ async def api_dataset_preview(request: Request, dataset_id: str, limit: int = 50
     )
 
 
+def _htmx_error_response(request: Request, message: str) -> HTMLResponse:
+    body = f'<p class="banner banner-warn">{html.escape(message)}</p>'
+    # HTMX does not swap 4xx responses into the target by default.
+    status = 200 if request.headers.get("HX-Request") else 400
+    return HTMLResponse(body, status_code=status)
+
+
+@app.post("/api/datasets/inspect-hf", response_model=None)
+async def api_inspect_hf_dataset(
+    request: Request,
+    hf_url: str = Form(...),
+    hf_config: str = Form(""),
+    hf_split: str = Form(""),
+):
+    try:
+        inspect_result = await asyncio.wait_for(
+            asyncio.to_thread(
+                datasets.inspect_hf_source,
+                hf_url,
+                hf_config.strip() or None,
+                hf_split.strip() or None,
+            ),
+            timeout=120.0,
+        )
+    except asyncio.TimeoutError:
+        return _htmx_error_response(
+            request,
+            "таймаут при обращении к Hugging Face (120 с). "
+            "Укажите config явно (для piimb/privy: privy-small или privy-large).",
+        )
+    except datasets.DatasetError as exc:
+        return _htmx_error_response(request, str(exc))
+    return templates.TemplateResponse(
+        request,
+        "partials/dataset_upload_mapping.html",
+        {"inspect": inspect_result},
+    )
+
+
 @app.post("/api/datasets/inspect-upload", response_model=None)
 async def api_inspect_dataset_upload(
     request: Request,
@@ -260,12 +315,7 @@ async def api_inspect_dataset_upload(
     try:
         inspect_result = datasets.inspect_upload(content, filename)
     except datasets.DatasetError as exc:
-        if request.headers.get("HX-Request"):
-            return HTMLResponse(
-                f'<p class="banner banner-warn">{html.escape(str(exc))}</p>',
-                status_code=400,
-            )
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return _htmx_error_response(request, str(exc))
     return templates.TemplateResponse(
         request,
         "partials/dataset_upload_mapping.html",
@@ -275,7 +325,13 @@ async def api_inspect_dataset_upload(
 
 @app.post("/api/datasets")
 async def api_create_dataset(
-    upload_token: str = Form(...),
+    source: str = Form("file"),
+    upload_token: str = Form(""),
+    hf_staging_token: str = Form(""),
+    hf_repo_id: str = Form(""),
+    hf_config: str = Form(""),
+    hf_split: str = Form(""),
+    hf_estimated_bytes: str = Form(""),
     title: str = Form(...),
     slug: str = Form(...),
     description: str = Form(""),
@@ -283,14 +339,61 @@ async def api_create_dataset(
     map_target: str = Form(""),
     map_metadata: str = Form(""),
 ) -> RedirectResponse:
+    column_mapping: dict[str, str] = {"input": map_input.strip()}
+    if map_target.strip():
+        column_mapping["target"] = map_target.strip()
+
+    if source == "huggingface":
+        try:
+            hf_meta = datasets.resolve_hf_import_meta(
+                hf_staging_token=hf_staging_token,
+                hf_repo_id=hf_repo_id,
+                hf_config=hf_config,
+                hf_split=hf_split,
+                hf_estimated_bytes=hf_estimated_bytes,
+            )
+            estimated = hf_meta.get("estimated_bytes")
+            staging_token = hf_staging_token.strip() or None
+            if datasets.should_use_background_import(estimated, hf_hub=True):
+                job_id = datasets.enqueue_hf_import_job(
+                    hf_meta,
+                    hf_staging_token=staging_token,
+                    title=title,
+                    description=description,
+                    slug=slug,
+                    column_mapping=column_mapping,
+                    metadata_csv=map_metadata,
+                )
+                hf_runner.launch_hf_import(job_id)
+            else:
+                record = datasets.save_custom_dataset_from_hf_sync(
+                    hf_meta,
+                    hf_staging_token=staging_token,
+                    title=title,
+                    description=description,
+                    slug=slug,
+                    column_mapping=column_mapping,
+                    metadata_csv=map_metadata,
+                )
+                return RedirectResponse(url=f"/datasets/{record.id}", status_code=303)
+        except datasets.DatasetConflictError as exc:
+            return RedirectResponse(
+                url=f"/datasets?upload_error={quote(str(exc))}",
+                status_code=303,
+            )
+        except (datasets.DatasetError, hf_runner.HfImportLaunchError) as exc:
+            return RedirectResponse(
+                url=f"/datasets?upload_error={quote(str(exc))}",
+                status_code=303,
+            )
+        return RedirectResponse(url=f"/datasets/import-jobs/{job_id}", status_code=303)
+
+    if not upload_token.strip():
+        raise HTTPException(status_code=400, detail="upload_token is required")
     try:
         content, filename = datasets.consume_staged_upload(upload_token)
     except datasets.DatasetError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    column_mapping: dict[str, str] = {"input": map_input.strip()}
-    if map_target.strip():
-        column_mapping["target"] = map_target.strip()
 
     try:
         record = datasets.save_custom_dataset(
@@ -308,6 +411,41 @@ async def api_create_dataset(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return RedirectResponse(url=f"/datasets/{record.id}", status_code=303)
+
+
+@app.get("/api/datasets/import-jobs/{job_id}", response_model=None)
+async def api_hf_import_job_status(request: Request, job_id: str):
+    try:
+        job = datasets.load_import_job(job_id)
+    except datasets.DatasetError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    effective_status = datasets.resolve_import_job_status(job)
+    ctx = {"job": job, "effective_status": effective_status}
+    if request.headers.get("accept", "").startswith("application/json"):
+        return JSONResponse({**job, "effective_status": effective_status})
+    if request.headers.get("HX-Request"):
+        return templates.TemplateResponse(
+            request,
+            "partials/hf_import_job_status.html",
+            ctx,
+        )
+    return JSONResponse({**job, "effective_status": effective_status})
+
+
+@app.get("/api/datasets/import-jobs/{job_id}/log")
+async def api_hf_import_job_log(job_id: str) -> HTMLResponse:
+    content = hf_runner.tail_import_log(job_id)
+    if not content:
+        try:
+            job = datasets.load_import_job(job_id)
+            log_path = job.get("screen_log")
+            if log_path:
+                content = runner.tail_file(Path(log_path))
+        except datasets.DatasetError:
+            content = ""
+    if not content:
+        content = "(log not available yet)"
+    return HTMLResponse(f'<pre class="log-tail">{html.escape(content)}</pre>')
 
 
 @app.post("/api/datasets/{dataset_id:path}/delete")

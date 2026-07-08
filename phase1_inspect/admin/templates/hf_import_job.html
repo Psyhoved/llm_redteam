@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Импорт HF — Phase 1 Admin{% endblock %}
+{% block content %}
+<h1>Импорт с Hugging Face</h1>
+<p class="muted">
+  Job <code>{{ job.job_id }}</code>
+  — <code>{{ job.repo_id }}</code> (split <code>{{ job.hf_split }}</code>)
+</p>
+
+<div class="card" id="hf-import-status-panel"
+  hx-get="/api/datasets/import-jobs/{{ job.job_id }}"
+  hx-trigger="load, every 3s"
+  hx-swap="innerHTML">
+  {% include "partials/hf_import_job_status.html" %}
+</div>
+
+<div class="card">
+  <h2>Live log</h2>
+  <div
+    hx-get="/api/datasets/import-jobs/{{ job.job_id }}/log"
+    hx-trigger="load, every 3s"
+    hx-swap="innerHTML"
+  >
+    <pre class="log-tail">loading...</pre>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  document.body.addEventListener('htmx:afterOnLoad', function (evt) {
+    const path = evt.detail.pathInfo.requestPath || '';
+    if (!path.match(/\/api\/datasets\/import-jobs\/[^/]+$/)) return;
+    const html = evt.detail.xhr.responseText || '';
+    if (html.includes('status-done')) {
+      const match = html.match(/href="(\/datasets\/[^"]+)"/);
+      if (match) {
+        setTimeout(function () { window.location.href = match[1]; }, 2000);
+      }
+    }
+  });
+</script>
+{% endblock %}

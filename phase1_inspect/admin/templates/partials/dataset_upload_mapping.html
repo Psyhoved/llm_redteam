@@ -1,8 +1,24 @@
 <div class="card upload-mapping-card">
   <h3>Маппинг колонок</h3>
+  {% if inspect.source == "huggingface" %}
+  <p class="muted">
+    Hugging Face: <code>{{ inspect.hf_repo_id }}</code>
+    {% if inspect.hf_config %} / config <code>{{ inspect.hf_config }}</code>{% endif %}
+    / split <code>{{ inspect.hf_split }}</code>
+    — оценка размера: {{ inspect.estimated_size_human }}.
+    {% if inspect.config_auto_selected %}
+    <br><strong>Config выбран автоматически.</strong>
+    Доступные: {{ inspect.available_configs | join(', ') }}.
+    {% endif %}
+    {% if inspect.background_required %}
+    <br><strong>Большой датасет: полная загрузка пойдёт в фоне.</strong>
+    {% endif %}
+  </p>
+  {% else %}
   <p class="muted">
     Файл <code>{{ inspect.filename }}</code> — {{ inspect.row_count }} строк, формат {{ inspect.source_format }}.
   </p>
+  {% endif %}
 
   {% if inspect.sample_rows %}
   <h4>Пример данных</h4>
@@ -29,7 +45,17 @@
   {% endif %}
 
   <form method="post" action="/api/datasets" class="field" style="margin-top: 1rem;">
+    {% if inspect.source == "huggingface" %}
+    <input type="hidden" name="source" value="huggingface">
+    <input type="hidden" name="hf_staging_token" value="{{ inspect.hf_staging_token }}">
+    <input type="hidden" name="hf_repo_id" value="{{ inspect.hf_repo_id }}">
+    <input type="hidden" name="hf_config" value="{{ inspect.hf_config }}">
+    <input type="hidden" name="hf_split" value="{{ inspect.hf_split }}">
+    <input type="hidden" name="hf_estimated_bytes" value="{{ inspect.estimated_bytes or '' }}">
+    {% else %}
+    <input type="hidden" name="source" value="file">
     <input type="hidden" name="upload_token" value="{{ inspect.upload_token }}">
+    {% endif %}
 
     <div class="grid-2">
       <div class="field">
@@ -54,7 +80,7 @@
         <select id="map_input" name="map_input" required>
           <option value="">— выберите —</option>
           {% for col in inspect.columns %}
-          <option value="{{ col }}" {% if col in ['prompt', 'goal', 'input', 'question', 'user_input', 'text'] %}selected{% endif %}>{{ col }}</option>
+          <option value="{{ col }}" {% if col in ['prompt', 'goal', 'input', 'question', 'user_input', 'text', 'full_text', 'masked', 'Промпт'] %}selected{% endif %}>{{ col }}</option>
           {% endfor %}
         </select>
       </div>
@@ -72,9 +98,11 @@
     <div class="field">
       <label for="map_metadata">Доп. колонки в metadata (опционально, через запятую)</label>
       <input type="text" id="map_metadata" name="map_metadata" placeholder="label, category, type">
-      <small class="muted">Имена колонок из файла, которые попадут в metadata сэмпла.</small>
+      <small class="muted">Имена колонок из датасета, которые попадут в metadata сэмпла.</small>
     </div>
 
-    <button type="submit" class="btn">Сохранить датасет</button>
+    <button type="submit" class="btn">
+      {% if inspect.background_required %}Сохранить (фоновая загрузка){% else %}Сохранить датасет{% endif %}
+    </button>
   </form>
 </div>

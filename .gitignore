@@ -9,6 +9,8 @@ phase1_inspect/datasets/wildjailbreak/
 phase1_inspect/datasets/do_not_answer/
 phase1_inspect/datasets/aya_redteaming/
 phase1_inspect/datasets/ukrf/
+phase1_inspect/datasets/custom/
+phase1_inspect/*.sqlite
 
 # Student reports (generated during labs)
 phase1_inspect/reports/*

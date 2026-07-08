@@ -4,6 +4,10 @@
 <h1>Датасеты</h1>
 <p class="muted">Встроенные наборы Phase 1 и пользовательские загрузки. Предпросмотр первых строк доступен для каждого датасета.</p>
 
+{% if upload_error %}
+<p class="banner banner-warn">{{ upload_error }}</p>
+{% endif %}
+
 <div class="card">
   <h2>Загрузить датасет</h2>
   <p class="muted">Поддерживаются CSV, JSONL и XLSX (до 50 MB). После выбора файла укажите маппинг колонок.</p>
@@ -23,6 +27,41 @@
   {% if upload_error %}
   <p class="banner banner-warn">{{ upload_error }}</p>
   {% endif %}
+</div>
+
+<div class="card">
+  <h2>Импорт с Hugging Face</h2>
+  <p class="muted">
+    Укажите ссылку на датасет (например <code>piimb/privy</code> или полный URL).
+    Preview — через streaming; полная загрузка до 8 GB. Датасеты &gt;500 MB загружаются в фоне (screen).
+  </p>
+  <form
+    id="dataset-hf-form"
+    hx-post="/api/datasets/inspect-hf"
+    hx-target="#hf-mapping-panel"
+    hx-swap="innerHTML"
+    hx-indicator="#hf-inspect-indicator"
+    class="field"
+  >
+    <div class="field">
+      <label for="hf_url">Ссылка Hugging Face</label>
+      <input type="text" id="hf_url" name="hf_url" placeholder="https://huggingface.co/datasets/piimb/privy" required>
+    </div>
+    <div class="grid-2">
+      <div class="field">
+        <label for="hf_config">Config (опционально)</label>
+        <input type="text" id="hf_config" name="hf_config" placeholder="privy-small">
+        <small class="muted">Для piimb/privy: <code>privy-small</code> или <code>privy-large</code></small>
+      </div>
+      <div class="field">
+        <label for="hf_split">Split (опционально)</label>
+        <input type="text" id="hf_split" name="hf_split" placeholder="train">
+      </div>
+    </div>
+    <button type="submit" class="btn">Проверить датасет</button>
+    <span id="hf-inspect-indicator" class="htmx-indicator muted"> Загрузка preview с Hugging Face…</span>
+  </form>
+  <div id="hf-mapping-panel" class="nested-card"></div>
 </div>
 
 <div class="card">
@@ -69,4 +108,17 @@
     </tbody>
   </table>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+  document.body.addEventListener('htmx:responseError', function (evt) {
+    const target = evt.detail.target;
+    if (!target || (target.id !== 'hf-mapping-panel' && target.id !== 'upload-mapping-panel')) return;
+    const status = evt.detail.xhr.status;
+    const msg = status === 404
+      ? 'Endpoint не найден — перезапустите админку после обновления кода.'
+      : 'Ошибка запроса (HTTP ' + status + ').';
+    target.innerHTML = '<p class="banner banner-warn">' + msg + '</p>';
+  });
+</script>
 {% endblock %}

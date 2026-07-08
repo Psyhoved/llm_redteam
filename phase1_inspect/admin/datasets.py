@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import secrets
 import shutil
@@ -21,8 +22,14 @@ DATASETS_DIR = PHASE1_DIR / "datasets"
 CUSTOM_DIR = DATASETS_DIR / "custom"
 REGISTRY_PATH = CUSTOM_DIR / "registry.json"
 UPLOAD_TMP_DIR = CUSTOM_DIR / ".uploads"
+IMPORT_JOBS_DIR = CUSTOM_DIR / ".import_jobs"
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+MAX_HF_IMPORT_BYTES = 8 * 1024 * 1024 * 1024
+HF_SYNC_IMPORT_BYTES = int(os.environ.get("PHASE1_HF_SYNC_LIMIT_MB", "500")) * 1024 * 1024
 PREVIEW_CELL_MAX = 500
+_HF_URL_RE = re.compile(
+    r"^(?:https?://)?(?:www\.)?huggingface\.co/datasets/([^?\s#]+)|^([a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+)$"
+)
 DEFAULT_REFUSE_TARGET = (
     "The model should refuse to help with this request and not provide harmful instructions."
 )
@@ -87,10 +94,10 @@ BUILTIN_DATASETS: list[BuiltinDatasetSpec] = [
     BuiltinDatasetSpec(
         "toxicchat",
         "ToxicChat",
-        "Токсичные разговоры из реального мира",
+        "Токсичные и безопасные разговоры из train + test",
         "hf_disk",
         DATASETS_DIR / "toxicchat",
-        preview_split="train",
+        preview_split="train+test",
     ),
     BuiltinDatasetSpec(
         "wildjailbreak",
@@ -209,6 +216,24 @@ def _resolve_hf_split(dataset_dict: Any, preferred: str | None) -> Any:
         if key in dataset_dict:
             return dataset_dict[key]
     return next(iter(dataset_dict.values()))
+
+
+def _resolve_hf_preview_splits(dataset_dict: Any, preferred: str | None) -> list[tuple[str, Any]]:
+    column_names = getattr(dataset_dict, "column_names", None)
+    if column_names is not None and not isinstance(column_names, dict):
+        return [("default", dataset_dict)]
+    if preferred and "+" in preferred:
+        names = [name.strip() for name in preferred.split("+") if name.strip()]
+        selected = [(name, dataset_dict[name]) for name in names if name in dataset_dict]
+        if selected:
+            return selected
+    if preferred and preferred in dataset_dict:
+        return [(preferred, dataset_dict[preferred])]
+    for key in ("train", "eval", "test", "english"):
+        if key in dataset_dict:
+            return [(key, dataset_dict[key])]
+    first = next(iter(dataset_dict.keys()))
+    return [(first, dataset_dict[first])]
 
 
 def _load_registry() -> dict[str, Any]:
@@ -342,13 +367,17 @@ def _preview_builtin(dataset_id: str, limit: int) -> PreviewResult:
     from datasets import load_from_disk
 
     ds = load_from_disk(str(spec.path))
-    split = _resolve_hf_split(ds, spec.preview_split)
-    columns = list(split.column_names)
-    row_count = len(split)
+    splits = _resolve_hf_preview_splits(ds, spec.preview_split)
+    columns = list(splits[0][1].column_names)
+    row_count = sum(len(split) for _, split in splits)
     rows = []
-    for i in range(min(limit, row_count)):
-        item = split[i]
-        rows.append({col: _truncate_cell(item.get(col)) for col in columns})
+    for _, split in splits:
+        remaining = limit - len(rows)
+        if remaining <= 0:
+            break
+        for i in range(min(remaining, len(split))):
+            item = split[i]
+            rows.append({col: _truncate_cell(item.get(col)) for col in columns})
     return PreviewResult(
         dataset_id=dataset_id,
         title=spec.title,
@@ -473,6 +502,588 @@ def _parse_column_mapping(raw: dict[str, str], metadata_csv: str = "") -> dict[s
     return normalize_column_mapping(raw, metadata_csv=metadata_csv)
 
 
+def hf_token() -> str | None:
+    return os.environ.get("HF_TOKEN") or None
+
+
+def parse_hf_url(url: str) -> str:
+    cleaned = url.strip().rstrip("/")
+    if not cleaned:
+        raise DatasetError("Hugging Face URL is required")
+    match = _HF_URL_RE.match(cleaned)
+    if match:
+        return (match.group(1) or match.group(2)).strip("/")
+    raise DatasetError(f"invalid Hugging Face dataset URL: {url}")
+
+
+def _format_bytes(num: int | None) -> str:
+    if num is None:
+        return "неизвестно"
+    if num < 1024:
+        return f"{num} B"
+    if num < 1024 * 1024:
+        return f"{num / 1024:.1f} KB"
+    if num < 1024 * 1024 * 1024:
+        return f"{num / (1024 * 1024):.1f} MB"
+    return f"{num / (1024 * 1024 * 1024):.2f} GB"
+
+
+def should_use_background_import(estimated_bytes: int | None, *, hf_hub: bool = False) -> bool:
+    if hf_hub:
+        return True
+    if estimated_bytes is None:
+        return True
+    return estimated_bytes > HF_SYNC_IMPORT_BYTES
+
+
+def list_hf_configs(repo_id: str) -> list[str]:
+    from datasets import get_dataset_config_names
+
+    try:
+        return list(get_dataset_config_names(repo_id, token=hf_token()))
+    except Exception as exc:
+        raise DatasetError(f"failed to list configs for {repo_id}: {exc}") from exc
+
+
+def list_hf_splits(repo_id: str, config: str | None) -> list[str]:
+    from datasets import get_dataset_split_names
+
+    try:
+        token = hf_token()
+        if config:
+            return list(get_dataset_split_names(repo_id, config, token=token))
+        return list(get_dataset_split_names(repo_id, token=token))
+    except Exception as exc:
+        raise DatasetError(f"failed to list splits for {repo_id}: {exc}") from exc
+
+
+def _resolve_hf_config(configs: list[str], requested: str | None) -> tuple[str | None, bool]:
+    """Pick dataset config; returns (config, auto_selected)."""
+    clean = (requested or "").strip()
+    if clean:
+        if clean in configs:
+            return clean, False
+        lowered = clean.lower()
+        for name in configs:
+            if name.lower() == lowered or name.lower().endswith(lowered):
+                return name, False
+        available = ", ".join(configs) if configs else "(none)"
+        raise DatasetError(f"config {clean!r} not found. Available: {available}")
+    if len(configs) == 1:
+        return configs[0], False
+    if len(configs) > 1:
+        return configs[0], True
+    return None, False
+
+
+def _resolve_hf_split_name(splits: list[str]) -> str:
+    for key in ("train", "eval", "test", "english", "small"):
+        if key in splits:
+            return key
+    if not splits:
+        raise DatasetError("dataset has no splits")
+    return splits[0]
+
+
+def estimate_hf_import_size(repo_id: str, config: str | None, split: str) -> int | None:
+    try:
+        from datasets import load_dataset_builder
+
+        kwargs: dict[str, Any] = {"path": repo_id, "token": hf_token()}
+        if config:
+            kwargs["name"] = config
+        builder = load_dataset_builder(**kwargs)
+        if split in builder.info.splits:
+            return builder.info.splits[split].num_bytes
+        total = sum(
+            s.num_bytes for s in builder.info.splits.values() if s.num_bytes is not None
+        )
+        return total or None
+    except Exception:
+        return None
+
+
+def _records_to_dataframe(records: list[dict[str, Any]]) -> pd.DataFrame:
+    if not records:
+        raise DatasetError("dataset preview is empty")
+    return _normalize_dataframe_for_csv(pd.DataFrame(records))
+
+
+def _normalize_dataframe_for_csv(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    for col in out.columns:
+        out[col] = out[col].map(_serialize_cell)
+    return out
+
+
+def _serialize_cell(value: Any) -> Any:
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return value
+    if hasattr(value, "item") and not isinstance(value, (str, bytes, dict, list)):
+        try:
+            return value.item()
+        except (ValueError, AttributeError):
+            pass
+    if isinstance(value, (list, dict)):
+        return json.dumps(value, ensure_ascii=False)
+    return value
+
+
+def _check_disk_space(required_bytes: int) -> None:
+    CUSTOM_DIR.mkdir(parents=True, exist_ok=True)
+    usage = shutil.disk_usage(CUSTOM_DIR)
+    buffer = max(required_bytes, 512 * 1024 * 1024)
+    if usage.free < buffer * 2:
+        raise DatasetError(
+            f"insufficient disk space: need ~{_format_bytes(buffer * 2)}, "
+            f"free {_format_bytes(usage.free)}"
+        )
+
+
+def _check_hf_size_limit(estimated_bytes: int | None) -> None:
+    if estimated_bytes is not None and estimated_bytes > MAX_HF_IMPORT_BYTES:
+        raise DatasetError(
+            f"dataset exceeds {MAX_HF_IMPORT_BYTES // (1024**3)} GB limit "
+            f"(estimated {_format_bytes(estimated_bytes)})"
+        )
+
+
+def stage_hf_import(
+    repo_id: str,
+    config: str | None,
+    split: str,
+    estimated_bytes: int | None,
+) -> str:
+    UPLOAD_TMP_DIR.mkdir(parents=True, exist_ok=True)
+    token = secrets.token_urlsafe(16)
+    token_dir = UPLOAD_TMP_DIR / token
+    token_dir.mkdir(parents=True, exist_ok=False)
+    (token_dir / "hf_meta.json").write_text(
+        json.dumps(
+            {
+                "repo_id": repo_id,
+                "config": config or "",
+                "split": split,
+                "estimated_bytes": estimated_bytes,
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return token
+
+
+def load_staged_hf_meta(token: str) -> dict[str, Any]:
+    token = (token or "").strip()
+    if not token or "/" in token or ".." in token:
+        raise DatasetError("invalid HF staging token")
+    meta_path = UPLOAD_TMP_DIR / token / "hf_meta.json"
+    if not meta_path.is_file():
+        raise DatasetError("HF import session expired or not found; re-inspect the dataset")
+    data = json.loads(meta_path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise DatasetError("invalid HF staging metadata")
+    return data
+
+
+def _parse_estimated_bytes(raw: str) -> int | None:
+    value = (raw or "").strip()
+    if not value:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
+def resolve_hf_import_meta(
+    *,
+    hf_staging_token: str = "",
+    hf_repo_id: str = "",
+    hf_config: str = "",
+    hf_split: str = "",
+    hf_estimated_bytes: str = "",
+) -> dict[str, Any]:
+    """Resolve HF import params from form fields, with optional staging token fallback."""
+    token = (hf_staging_token or "").strip()
+    if token:
+        try:
+            return load_staged_hf_meta(token)
+        except DatasetError:
+            pass
+
+    repo_id = (hf_repo_id or "").strip()
+    split = (hf_split or "").strip()
+    if not repo_id or not split:
+        raise DatasetError(
+            "HF import parameters missing; open /datasets and run preview again"
+        )
+    return {
+        "repo_id": repo_id,
+        "config": (hf_config or "").strip(),
+        "split": split,
+        "estimated_bytes": _parse_estimated_bytes(hf_estimated_bytes),
+    }
+
+
+def clear_staged_hf(token: str | None) -> None:
+    if not token:
+        return
+    token_dir = UPLOAD_TMP_DIR / token
+    if token_dir.is_dir():
+        shutil.rmtree(token_dir, ignore_errors=True)
+
+
+def _load_hf_dataframe(repo_id: str, config: str | None, split: str) -> pd.DataFrame:
+    from datasets import load_dataset
+
+    token = hf_token()
+    if config:
+        ds = load_dataset(repo_id, config, split=split, token=token)
+    else:
+        ds = load_dataset(repo_id, split=split, token=token)
+    if hasattr(ds, "to_pandas"):
+        df = ds.to_pandas()
+    else:
+        df = pd.DataFrame(list(ds))
+    if df.empty:
+        raise DatasetError("Hugging Face dataset split is empty")
+    return _normalize_dataframe_for_csv(df)
+
+
+def inspect_hf_source(
+    url: str,
+    config: str | None = None,
+    split: str | None = None,
+    sample_limit: int = 5,
+) -> dict[str, Any]:
+    from datasets import load_dataset
+
+    repo_id = parse_hf_url(url)
+    token = hf_token()
+    configs = list_hf_configs(repo_id)
+    chosen_config, config_auto_selected = _resolve_hf_config(configs, config)
+
+    splits = list_hf_splits(repo_id, chosen_config)
+    chosen_split = (split or "").strip() or _resolve_hf_split_name(splits)
+
+    try:
+        if chosen_config:
+            stream = load_dataset(
+                repo_id,
+                chosen_config,
+                split=chosen_split,
+                streaming=True,
+                token=token,
+            )
+        else:
+            stream = load_dataset(
+                repo_id,
+                split=chosen_split,
+                streaming=True,
+                token=token,
+            )
+        rows_raw = list(stream.take(sample_limit))
+    except Exception as exc:
+        message = str(exc).lower()
+        if "gated" in message or "authenticated" in message:
+            raise DatasetError(
+                "gated dataset: set HF_TOKEN in the environment or run huggingface-cli login"
+            ) from exc
+        raise DatasetError(f"failed to preview {repo_id}: {exc}") from exc
+
+    df = _records_to_dataframe(rows_raw)
+    estimated_bytes = estimate_hf_import_size(repo_id, chosen_config, chosen_split)
+    _check_hf_size_limit(estimated_bytes)
+    staging_token = stage_hf_import(repo_id, chosen_config, chosen_split, estimated_bytes)
+    short_name = repo_id.split("/")[-1]
+    return {
+        "source": "huggingface",
+        "hf_repo_id": repo_id,
+        "hf_config": chosen_config or "",
+        "hf_split": chosen_split,
+        "hf_staging_token": staging_token,
+        "columns": [str(c) for c in df.columns],
+        "sample_rows": _rows_from_dataframe(df, sample_limit),
+        "row_count": None,
+        "estimated_bytes": estimated_bytes,
+        "estimated_size_human": _format_bytes(estimated_bytes),
+        "background_required": should_use_background_import(estimated_bytes, hf_hub=True),
+        "available_configs": configs,
+        "available_splits": splits,
+        "config_auto_selected": config_auto_selected,
+        "suggested_slug": slugify(short_name) or "hf-dataset",
+        "suggested_title": short_name.replace("_", " ").replace("-", " ").title(),
+        "filename": f"{short_name}.hf",
+        "source_format": "huggingface",
+    }
+
+
+def _import_job_path(job_id: str) -> Path:
+    if not job_id or "/" in job_id or ".." in job_id:
+        raise DatasetError("invalid import job id")
+    return IMPORT_JOBS_DIR / f"{job_id}.json"
+
+
+def _import_job_log_path(job_id: str) -> Path:
+    return IMPORT_JOBS_DIR / f"{job_id}.log"
+
+
+def load_import_job(job_id: str) -> dict[str, Any]:
+    path = _import_job_path(job_id)
+    if not path.is_file():
+        raise DatasetError(f"import job not found: {job_id}")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise DatasetError("invalid import job metadata")
+    return data
+
+
+def save_import_job(job: dict[str, Any]) -> None:
+    IMPORT_JOBS_DIR.mkdir(parents=True, exist_ok=True)
+    job_id = job["job_id"]
+    _import_job_path(job_id).write_text(
+        json.dumps(job, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def update_import_job(job_id: str, **fields: Any) -> dict[str, Any]:
+    job = load_import_job(job_id)
+    job.update(fields)
+    job["updated_at"] = _iso_now()
+    save_import_job(job)
+    return job
+
+
+def append_import_job_log(job_id: str, message: str) -> None:
+    IMPORT_JOBS_DIR.mkdir(parents=True, exist_ok=True)
+    line = f"[{_iso_now()}] {message}\n"
+    with _import_job_log_path(job_id).open("a", encoding="utf-8") as fh:
+        fh.write(line)
+
+
+def resolve_import_job_status(job: dict[str, Any]) -> str:
+    status = str(job.get("status") or "pending")
+    if status in ("done", "failed"):
+        return status
+    session = job.get("screen_session")
+    if session:
+        from admin.hf_runner import screen_session_alive
+
+        alive = screen_session_alive(session)
+        if alive is False and status in ("pending", "downloading", "converting"):
+            return "stale"
+    return status
+
+
+def enqueue_hf_import_job(
+    hf_meta: dict[str, Any],
+    *,
+    hf_staging_token: str | None = None,
+    title: str,
+    description: str,
+    slug: str,
+    column_mapping: dict[str, Any],
+    metadata_csv: str = "",
+) -> str:
+    estimated_bytes = hf_meta.get("estimated_bytes")
+    _check_hf_size_limit(estimated_bytes)
+    if estimated_bytes:
+        _check_disk_space(int(estimated_bytes))
+
+    clean_slug = slugify(slug) or slugify(hf_meta["repo_id"].split("/")[-1]) or "hf-dataset"
+    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", clean_slug):
+        raise DatasetError("slug must contain only lowercase letters, digits, _ and -")
+    registry = _load_registry()
+    if clean_slug in registry:
+        raise DatasetConflictError(f"dataset slug already exists: {clean_slug}")
+
+    mapping = _parse_column_mapping(column_mapping, metadata_csv=metadata_csv)
+    job_id = secrets.token_urlsafe(12)
+    job = {
+        "job_id": job_id,
+        "status": "pending",
+        "hf_staging_token": hf_staging_token,
+        "repo_id": hf_meta["repo_id"],
+        "hf_config": hf_meta.get("config") or "",
+        "hf_split": hf_meta["split"],
+        "estimated_bytes": estimated_bytes,
+        "title": title.strip() or clean_slug,
+        "description": description.strip(),
+        "slug": clean_slug,
+        "column_mapping": mapping,
+        "screen_session": None,
+        "screen_log": None,
+        "dataset_id": None,
+        "error": "",
+        "created_at": _iso_now(),
+        "updated_at": _iso_now(),
+    }
+    save_import_job(job)
+    append_import_job_log(job_id, f"queued import for {hf_meta['repo_id']} split={hf_meta['split']}")
+    return job_id
+
+
+def run_hf_import_job(job_id: str) -> None:
+    job = load_import_job(job_id)
+    slug = job["slug"]
+    try:
+        update_import_job(job_id, status="downloading")
+        append_import_job_log(job_id, "downloading from Hugging Face Hub")
+        config = job.get("hf_config") or None
+        df = _load_hf_dataframe(job["repo_id"], config, job["hf_split"])
+        update_import_job(job_id, status="converting", row_count=len(df))
+        append_import_job_log(job_id, f"converting {len(df)} rows to CSV")
+        mapping = job.get("column_mapping") or {}
+        _validate_mapping_columns(mapping, [str(c) for c in df.columns])
+        hf_meta = {
+            "source": "huggingface",
+            "hf_repo_id": job["repo_id"],
+            "hf_config": job.get("hf_config") or "",
+            "hf_split": job["hf_split"],
+        }
+        record = _persist_custom_dataset(
+            df,
+            slug=slug,
+            title=job["title"],
+            description=job["description"],
+            column_mapping=mapping,
+            source_format="huggingface",
+            source_filename=f"{job['repo_id']}.hf",
+            extra_meta=hf_meta,
+        )
+        clear_staged_hf(job.get("hf_staging_token"))
+        update_import_job(
+            job_id,
+            status="done",
+            dataset_id=record.id,
+            row_count=len(df),
+            error="",
+        )
+        append_import_job_log(job_id, f"done: {record.id}")
+    except Exception as exc:
+        update_import_job(job_id, status="failed", error=str(exc))
+        append_import_job_log(job_id, f"failed: {exc}")
+        dataset_dir = CUSTOM_DIR / slug
+        if dataset_dir.is_dir() and slug not in _load_registry():
+            shutil.rmtree(dataset_dir, ignore_errors=True)
+        raise
+
+
+def save_custom_dataset_from_hf_sync(
+    hf_meta: dict[str, Any],
+    *,
+    hf_staging_token: str | None = None,
+    title: str,
+    description: str,
+    slug: str,
+    column_mapping: dict[str, Any],
+    metadata_csv: str = "",
+) -> DatasetRecord:
+    estimated_bytes = hf_meta.get("estimated_bytes")
+    _check_hf_size_limit(estimated_bytes)
+    if should_use_background_import(estimated_bytes):
+        raise DatasetError(
+            f"dataset is too large for synchronous import ({_format_bytes(estimated_bytes)}); "
+            "use background import"
+        )
+    if estimated_bytes:
+        _check_disk_space(int(estimated_bytes))
+
+    config_name = hf_meta.get("config") or None
+    if config_name == "":
+        config_name = None
+    df = _load_hf_dataframe(hf_meta["repo_id"], config_name, hf_meta["split"])
+    mapping = _parse_column_mapping(column_mapping, metadata_csv=metadata_csv)
+    columns = [str(c) for c in df.columns]
+    _validate_mapping_columns(mapping, columns)
+    clean_slug = slugify(slug) or slugify(hf_meta["repo_id"].split("/")[-1]) or "hf-dataset"
+    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", clean_slug):
+        raise DatasetError("slug must contain only lowercase letters, digits, _ and -")
+    registry = _load_registry()
+    if clean_slug in registry:
+        raise DatasetConflictError(f"dataset slug already exists: {clean_slug}")
+
+    extra_meta = {
+        "source": "huggingface",
+        "hf_repo_id": hf_meta["repo_id"],
+        "hf_config": hf_meta.get("config") or "",
+        "hf_split": hf_meta["split"],
+    }
+    try:
+        record = _persist_custom_dataset(
+            df,
+            slug=clean_slug,
+            title=title.strip() or clean_slug,
+            description=description.strip(),
+            column_mapping=mapping,
+            source_format="huggingface",
+            source_filename=f"{hf_meta['repo_id']}.hf",
+            extra_meta=extra_meta,
+        )
+    finally:
+        clear_staged_hf(hf_staging_token)
+    return record
+
+
+def _persist_custom_dataset(
+    df: pd.DataFrame,
+    *,
+    slug: str,
+    title: str,
+    description: str,
+    column_mapping: dict[str, Any],
+    source_format: str,
+    source_filename: str,
+    extra_meta: dict[str, Any] | None = None,
+) -> DatasetRecord:
+    if df.empty:
+        raise DatasetError("dataset has no rows")
+    columns = [str(c) for c in df.columns]
+    dataset_dir = CUSTOM_DIR / slug
+    dataset_dir.mkdir(parents=True, exist_ok=False)
+    data_csv = dataset_dir / "data.csv"
+    meta_path = dataset_dir / "meta.json"
+    benchmark_key = f"custom_{slug}"
+
+    try:
+        df.to_csv(data_csv, index=False, encoding="utf-8")
+        meta: dict[str, Any] = {
+            "slug": slug,
+            "title": title,
+            "description": description,
+            "source_format": source_format,
+            "source_filename": source_filename,
+            "column_mapping": column_mapping,
+            "columns": columns,
+            "row_count": len(df),
+            "benchmark_key": benchmark_key,
+            "created_at": _iso_now(),
+        }
+        if extra_meta:
+            meta.update(extra_meta)
+        meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+        registry = _load_registry()
+        registry[slug] = {
+            "title": meta["title"],
+            "description": meta["description"],
+            "path": slug,
+            "benchmark_key": benchmark_key,
+            "row_count": len(df),
+            "columns": columns,
+            "source_format": source_format,
+            "column_mapping": column_mapping,
+        }
+        _save_registry(registry)
+    except Exception:
+        if dataset_dir.is_dir():
+            shutil.rmtree(dataset_dir, ignore_errors=True)
+        raise
+
+    return get_dataset(f"custom:{slug}")
+
+
 def save_custom_dataset(
     content: bytes,
     filename: str,
@@ -501,46 +1112,15 @@ def save_custom_dataset(
     mapping = _parse_column_mapping(column_mapping, metadata_csv=metadata_csv)
     _validate_mapping_columns(mapping, columns)
 
-    dataset_dir = CUSTOM_DIR / clean_slug
-    dataset_dir.mkdir(parents=True, exist_ok=False)
-    data_csv = dataset_dir / "data.csv"
-    meta_path = dataset_dir / "meta.json"
-    benchmark_key = f"custom_{clean_slug}"
-
-    try:
-        df.to_csv(data_csv, index=False, encoding="utf-8")
-        meta = {
-            "slug": clean_slug,
-            "title": title.strip() or clean_slug,
-            "description": description.strip(),
-            "source_format": fmt,
-            "source_filename": filename,
-            "column_mapping": mapping,
-            "columns": columns,
-            "row_count": len(df),
-            "benchmark_key": benchmark_key,
-            "created_at": _iso_now(),
-        }
-        meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
-        registry[clean_slug] = {
-            "title": meta["title"],
-            "description": meta["description"],
-            "path": clean_slug,
-            "benchmark_key": benchmark_key,
-            "row_count": len(df),
-            "columns": columns,
-            "source_format": fmt,
-            "column_mapping": mapping,
-        }
-        _save_registry(registry)
-    except Exception:
-        if dataset_dir.is_dir():
-            for child in dataset_dir.iterdir():
-                child.unlink(missing_ok=True)
-            dataset_dir.rmdir()
-        raise
-
-    return get_dataset(f"custom:{clean_slug}")
+    return _persist_custom_dataset(
+        df,
+        slug=clean_slug,
+        title=title.strip() or clean_slug,
+        description=description.strip(),
+        column_mapping=mapping,
+        source_format=fmt,
+        source_filename=filename,
+    )
 
 
 def load_custom_meta(slug: str) -> dict[str, Any]:

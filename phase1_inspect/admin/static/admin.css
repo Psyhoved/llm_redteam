@@ -344,8 +344,39 @@ td {
   color: var(--ok);
 }
 
+.badge-pending,
+.badge-downloading,
+.badge-converting {
+  background: rgba(245, 165, 36, 0.2);
+  color: var(--warn);
+}
+
+.badge-done {
+  background: rgba(61, 214, 140, 0.2);
+  color: var(--ok);
+}
+
+.badge-failed,
+.badge-stale {
+  background: rgba(248, 113, 113, 0.2);
+  color: var(--fail);
+}
+
 .benchmark-custom {
   border-color: rgba(61, 214, 140, 0.35);
+}
+
+.htmx-indicator {
+  display: none;
+  margin-left: 0.5rem;
+}
+
+.htmx-request .htmx-indicator {
+  display: inline;
+}
+
+.htmx-request.htmx-indicator {
+  display: inline;
 }
 
 .meta-grid {
