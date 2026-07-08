@@ -44,7 +44,6 @@ from deepteam.vulnerabilities import PromptLeakage
 LAB_DIR = Path(__file__).resolve().parent
 PHASE2_DIR = LAB_DIR.parent.parent
 REPO_ROOT = PHASE2_DIR.parent
-DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 load_dotenv(REPO_ROOT / ".env")
 
@@ -196,19 +195,19 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--target-base-url",
-        default=env_first("TARGET_BASE_URL", "OPENROUTER_BASE_URL", default=DEFAULT_OPENROUTER_BASE_URL),
+        default=env_first("TARGET_BASE_URL", "OPENROUTER_BASE_URL"),
         metavar="URL",
         help="OpenAI-compatible endpoint для Target. Default: %(default)s",
     )
     parser.add_argument(
         "--attacker-base-url",
-        default=env_first("ATTACKER_BASE_URL", "OPENROUTER_BASE_URL", default=DEFAULT_OPENROUTER_BASE_URL),
+        default=env_first("ATTACKER_BASE_URL", "OPENROUTER_BASE_URL"),
         metavar="URL",
         help="OpenAI-compatible endpoint для Attacker. Default: %(default)s",
     )
     parser.add_argument(
         "--judge-base-url",
-        default=env_first("JUDGE_BASE_URL", "OPENROUTER_BASE_URL", default=DEFAULT_OPENROUTER_BASE_URL),
+        default=env_first("JUDGE_BASE_URL", "OPENROUTER_BASE_URL"),
         metavar="URL",
         help="OpenAI-compatible endpoint для Judge. Default: %(default)s",
     )
@@ -266,10 +265,28 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def validate_base_urls(args: argparse.Namespace) -> None:
+    missing = [
+        name
+        for name, value in (
+            ("TARGET_BASE_URL or OPENROUTER_BASE_URL", args.target_base_url),
+            ("ATTACKER_BASE_URL or OPENROUTER_BASE_URL", args.attacker_base_url),
+            ("JUDGE_BASE_URL or OPENROUTER_BASE_URL", args.judge_base_url),
+        )
+        if not value
+    ]
+    if missing:
+        raise SystemExit(
+            "Ошибка: задайте OPENROUTER_BASE_URL или role-specific endpoints: "
+            + ", ".join(missing)
+        )
+
+
 # ─── Точка входа ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     args = build_arg_parser().parse_args()
+    validate_base_urls(args)
 
     openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
     target_api_key = env_first("TARGET_API_KEY", "OPENROUTER_API_KEY")
