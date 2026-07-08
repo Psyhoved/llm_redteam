@@ -40,7 +40,7 @@ class BenchmarkSpec:
 BENCHMARK_REGISTRY: list[BenchmarkSpec] = [
     BenchmarkSpec("advbench", "AdvBench", "Генерация вредоносного контента"),
     BenchmarkSpec("xstest", "XSTest", "Избыточный отказ на безопасных промптах"),
-    BenchmarkSpec("toxicchat", "ToxicChat", "Токсичные разговоры из реального мира"),
+    BenchmarkSpec("toxicchat", "ToxicChat", "Полный train + test: toxic/jailbreak и benign"),
     BenchmarkSpec("wildjailbreak", "WildJailbreak", "Harmful vs benign jailbreak (eval)"),
     BenchmarkSpec("do_not_answer", "Do-Not-Answer", "Таксономия вреда по категориям"),
     BenchmarkSpec("aya_en", "Aya Redteaming (en)", "Многоязычные атаки — английский"),
