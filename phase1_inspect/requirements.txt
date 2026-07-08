@@ -13,3 +13,4 @@ python-slugify
 pytest
 pytest-playwright
 playwright
+supervisor

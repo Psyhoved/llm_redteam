@@ -14,6 +14,7 @@ AYA_LANG="${3:-}"
 # Preserve CLI/admin overrides before sourcing .env (set -a would overwrite them).
 _OVERRIDE_TARGET_MODEL="${TARGET_MODEL:-}"
 _OVERRIDE_GRADER_MODEL="${GRADER_MODEL:-}"
+_OVERRIDE_MYPROXY_API_KEY="${MYPROXY_API_KEY:-}"
 _OVERRIDE_MAX_CONNECTIONS="${PHASE1_MAX_CONNECTIONS:-}"
 
 if [[ -z "$LAB_KEY" ]]; then
@@ -43,6 +44,9 @@ if [[ -n "$_OVERRIDE_TARGET_MODEL" ]]; then
 fi
 if [[ -n "$_OVERRIDE_GRADER_MODEL" ]]; then
   GRADER_MODEL="$_OVERRIDE_GRADER_MODEL"
+fi
+if [[ -n "$_OVERRIDE_MYPROXY_API_KEY" ]]; then
+  MYPROXY_API_KEY="$_OVERRIDE_MYPROXY_API_KEY"
 fi
 if [[ -n "$_OVERRIDE_MAX_CONNECTIONS" ]]; then
   PHASE1_MAX_CONNECTIONS="$_OVERRIDE_MAX_CONNECTIONS"

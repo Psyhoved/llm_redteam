@@ -16,5 +16,5 @@ fi
 exec "$PYTHON_BIN" -m inspect_ai view start \
   --host "$HOST" \
   --port "$PORT" \
-  --log-dir . \
+  --log-dir "${PHASE1_INSPECT_LOG_DIR:-logs}" \
   --recursive

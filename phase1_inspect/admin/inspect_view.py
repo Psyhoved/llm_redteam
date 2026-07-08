@@ -55,5 +55,5 @@ def start_command() -> str:
     return (
         f"cd {PHASE1_DIR} && source .venv/bin/activate && "
         f"python -m inspect_ai view start --host 0.0.0.0 --port {INSPECT_VIEW_PORT} "
-        f"--log-dir . --recursive"
+        f"--log-dir logs --recursive"
     )
