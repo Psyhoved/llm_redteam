@@ -15,7 +15,10 @@
   <tbody>
     {% for s in samples %}
     <tr>
-      <td><code>{{ s.id }}</code>{% if s.epoch %}<br><small>ep {{ s.epoch }}</small>{% endif %}</td>
+      <td>
+        <code>{{ s.id }}</code>{% if s.epoch %}<br><small>ep {{ s.epoch }}</small>{% endif %}
+        {% if s.uuid %}<br><small>uuid {{ s.uuid }}</small>{% endif %}
+      </td>
       <td class="sample-cell">{{ s.input_preview }}</td>
       <td class="sample-cell">{{ s.output_preview or '—' }}</td>
       <td>

@@ -51,6 +51,7 @@ def collect_samples(eval_log: Path, limit: int = 20, text_limit: int = 200) -> l
             {
                 "id": str(_get(summary, "id", "")),
                 "epoch": str(_get(summary, "epoch", "")),
+                "uuid": str(_get(summary, "uuid", "")),
                 "input_preview": _preview(inp, text_limit),
                 "output_preview": _preview(out, text_limit),
                 "scores": _scores_dict(_get(summary, "scores", {})),
