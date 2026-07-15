@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import inspect_aidr_hooks  # noqa: F401 — register AIDR/OpenWebUI tracing hooks
 from inspect_ai.scorer import Metric, SampleScore, accuracy, metric, stderr
 
 PROMPT_HARMFUL = "harmful"

@@ -156,6 +156,16 @@ if [[ "$LAB_KEY" == "aya" ]]; then
   export TARGET_LANG="$lang"
 fi
 
+# AIDR / Langfuse tracing defaults for standalone lab runs.
+# Orchestrator overrides INSPECT_AIDR_LAB_NAME (e.g. aya_en, custom_<slug>).
+if [[ -z "${INSPECT_AIDR_LAB_NAME:-}" ]]; then
+  if [[ "$LAB_KEY" == "custom" ]]; then
+    export INSPECT_AIDR_LAB_NAME="custom_${CUSTOM_DATASET_SLUG}"
+  else
+    export INSPECT_AIDR_LAB_NAME="$LAB_KEY"
+  fi
+fi
+
 args=(
   -m inspect_ai eval "$TASK_TARGET"
   --model "$TARGET_MODEL"

@@ -360,7 +360,7 @@ for run_spec in "${RUNS[@]}"; do
     progress_pid=$!
   fi
 
-  bash -lc "$cmd" 2>&1 | tee "$tmp_out" || raw_exit_code=$?
+  INSPECT_AIDR_RUN_ID="$RUN_ID" INSPECT_AIDR_LAB_NAME="$name" bash -lc "$cmd" 2>&1 | tee "$tmp_out" || raw_exit_code=$?
   cp "$tmp_out" "$tmp_err"
   lab_finished="$(date -Is -u)"
 
