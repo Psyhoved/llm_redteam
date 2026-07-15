@@ -16,6 +16,7 @@ from fastapi.templating import Jinja2Templates
 import asyncio
 
 from admin import config, datasets, db, hf_runner, inspect_view, runner
+from scripts import phase1_progress
 
 APP_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(APP_DIR / "templates"))
@@ -45,14 +46,86 @@ def _live_panel_context(run_id: int) -> dict[str, Any]:
         progress = {}
     effective_status = runner.resolve_run_status({**run, **progress})
     stale = effective_status == "stale" or bool(progress.get("stale"))
+    terminal = effective_status not in {"running", "stale"}
+    lab_runs = progress.get("lab_runs") or payload["lab_runs"]
+    lab_runs = _enrich_lab_runs_from_eval_logs(
+        lab_runs,
+        limit=_run_limit(run, progress),
+        count_samples=terminal,
+    )
+    if lab_runs:
+        progress["lab_runs"] = lab_runs
+    if terminal:
+        _update_progress_totals(progress, lab_runs)
     run = {**run, "status": effective_status, "stale": stale}
     return {
         "run": run,
-        "lab_runs": progress.get("lab_runs") or payload["lab_runs"],
+        "lab_runs": lab_runs,
         "progress": progress,
         "stale": stale,
         "effective_status": effective_status,
     }
+
+
+def _run_limit(run: dict[str, Any], progress: dict[str, Any]) -> int | None:
+    raw = run.get("limit_val") or progress.get("limit_val")
+    try:
+        return int(raw) if raw is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _enrich_lab_runs_from_eval_logs(
+    lab_runs: list[dict[str, Any]],
+    *,
+    limit: int | None,
+    count_samples: bool,
+) -> list[dict[str, Any]]:
+    enriched: list[dict[str, Any]] = []
+    for lab_run in lab_runs:
+        row = dict(lab_run)
+        lab_name = str(row.get("lab_name", "") or "")
+        if not lab_name:
+            enriched.append(row)
+            continue
+
+        eval_log = row.get("eval_log")
+        eval_path = _resolve_eval_log_path(str(eval_log)) if eval_log else None
+        if not eval_log and lab_name.startswith("custom_"):
+            eval_path = phase1_progress.find_newest_eval_log(config.PHASE1_DIR, lab_name)
+            if eval_path is not None:
+                row["eval_log"] = str(eval_path)
+
+        if count_samples and eval_path is not None and eval_path.is_file():
+            done = row.get("samples_done")
+            total = row.get("samples_total")
+            if done in (None, 0) or total in (None, 0):
+                try:
+                    samples_done, samples_total = phase1_progress.count_samples(eval_path, limit)
+                    row["samples_done"] = samples_done
+                    row["samples_total"] = samples_total
+                except Exception:
+                    pass
+        enriched.append(row)
+    return enriched
+
+
+def _update_progress_totals(progress: dict[str, Any], lab_runs: list[dict[str, Any]]) -> None:
+    samples_done = 0
+    samples_total = 0
+    has_progress = False
+    for lab_run in lab_runs:
+        done = lab_run.get("samples_done")
+        total = lab_run.get("samples_total")
+        if done is not None:
+            samples_done += int(done)
+            has_progress = True
+        if total is not None:
+            samples_total += int(total)
+            has_progress = True
+    if has_progress:
+        progress["samples_done"] = samples_done
+        progress["samples_total"] = samples_total
 
 
 def _resolve_eval_log_path(eval_log: str) -> Path:
@@ -160,6 +233,17 @@ def _resolve_run_context(run_id: int) -> dict[str, Any]:
         progress = {}
     effective_status = runner.resolve_run_status({**run, **progress})
     stale = effective_status == "stale" or bool(progress.get("stale"))
+    terminal = effective_status not in {"running", "stale"}
+    lab_runs = progress.get("lab_runs") or payload["lab_runs"]
+    lab_runs = _enrich_lab_runs_from_eval_logs(
+        lab_runs,
+        limit=_run_limit(run, progress),
+        count_samples=terminal,
+    )
+    if lab_runs:
+        progress["lab_runs"] = lab_runs
+    if terminal:
+        _update_progress_totals(progress, lab_runs)
     run = {**run, "status": effective_status, "stale": stale}
     if progress.get("samples_done") is not None:
         run["samples_done"] = progress["samples_done"]
@@ -177,7 +261,7 @@ def _resolve_run_context(run_id: int) -> dict[str, Any]:
     metrics_report = config.METRICS_DIR / f"run_{run_id}" / "report.html"
     ctx = {
         "run": run,
-        "lab_runs": progress.get("lab_runs") or payload["lab_runs"],
+        "lab_runs": lab_runs,
         "meta": meta,
         "screen_log": screen_log,
         "metrics_report_exists": metrics_report.is_file(),

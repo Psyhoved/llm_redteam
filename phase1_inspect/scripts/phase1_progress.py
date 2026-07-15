@@ -21,7 +21,7 @@ BENCHMARK_EVAL_NAMES: dict[str, list[str]] = {
 def eval_name_candidates(benchmark_name: str) -> list[str]:
     names = BENCHMARK_EVAL_NAMES.get(benchmark_name, [benchmark_name])
     if benchmark_name.startswith("custom_"):
-        names = [benchmark_name, *names]
+        names = [benchmark_name, benchmark_name.replace("_", "-", 1), *names]
     if benchmark_name not in names:
         names = [benchmark_name, *names]
     seen: set[str] = set()

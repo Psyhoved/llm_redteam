@@ -30,16 +30,26 @@ def read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace")
 
 
-def find_eval_log(text: str, base_dir: Path) -> Path | None:
+def find_eval_log(text: str, base_dir: Path, lab_name: str = "") -> Path | None:
     matches = re.findall(r"Log:\s+([^\s]+\.eval)", text)
-    if not matches:
-        return None
+    if matches:
+        raw = matches[-1]
+        path = Path(raw)
+        if not path.is_absolute():
+            path = base_dir / path
+        return path
 
-    raw = matches[-1]
-    path = Path(raw)
-    if not path.is_absolute():
-        path = base_dir / path
-    return path
+    if lab_name:
+        try:
+            try:
+                from scripts.phase1_progress import find_newest_eval_log
+            except ModuleNotFoundError:
+                from phase1_progress import find_newest_eval_log
+
+            return find_newest_eval_log(base_dir, lab_name)
+        except Exception:  # noqa: BLE001 - status reporting must stay best-effort
+            return None
+    return None
 
 
 def inspect_log_status(eval_log: Path) -> tuple[str | None, str | None]:
@@ -76,7 +86,7 @@ def main() -> None:
     combined = f"{stdout}\n{stderr}"
     base_dir = Path(args.base_dir)
 
-    eval_log = find_eval_log(combined, base_dir)
+    eval_log = find_eval_log(combined, base_dir, lab_name=args.lab_name)
     eval_log_s = str(eval_log) if eval_log is not None else ""
     status: str | None = None
     error_message: str | None = None
