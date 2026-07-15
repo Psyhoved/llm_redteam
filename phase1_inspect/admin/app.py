@@ -16,6 +16,7 @@ from fastapi.templating import Jinja2Templates
 import asyncio
 
 from admin import config, datasets, db, hf_runner, inspect_view, runner
+from scripts import phase1_chat_messages as chat_messages
 from scripts import phase1_progress
 
 APP_DIR = Path(__file__).resolve().parent
@@ -595,6 +596,82 @@ async def api_get_run(run_id: int) -> JSONResponse:
         return JSONResponse(db.get_run(run_id))
     except RuntimeError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+def _chat_rows_for_run(run_id: int) -> list[dict[str, str]]:
+    try:
+        payload = db.get_run(run_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    run = payload.get("run", {})
+    lab_runs = _enrich_lab_runs_from_eval_logs(
+        payload.get("lab_runs", []),
+        limit=_run_limit(run, {}),
+        count_samples=False,
+    )
+    chats: list[dict[str, str]] = []
+    for lab_run in lab_runs:
+        lab_name = str(lab_run.get("lab_name", "") or "")
+        eval_log = str(lab_run.get("eval_log", "") or "")
+        if not lab_name or not eval_log:
+            continue
+        chats.append(
+            {
+                "chat_id": chat_messages.build_chat_id(run_id, lab_name),
+                "lab_name": lab_name,
+                "eval_log": eval_log,
+            }
+        )
+    return chats
+
+
+@app.get("/api/runs/{run_id}/chats")
+async def api_run_chats(run_id: int) -> JSONResponse:
+    return JSONResponse({"run_id": run_id, "chats": _chat_rows_for_run(run_id)})
+
+
+@app.get("/api/runs/{run_id}/chats/{lab_name}/messages")
+async def api_run_chat_messages(run_id: int, lab_name: str) -> JSONResponse:
+    chat = next(
+        (row for row in _chat_rows_for_run(run_id) if row["lab_name"] == lab_name),
+        None,
+    )
+    if chat is None:
+        raise HTTPException(status_code=404, detail=f"chat not found: {lab_name}")
+
+    eval_log = str(_resolve_eval_log_path(chat["eval_log"]))
+    try:
+        payload = await asyncio.wait_for(
+            asyncio.to_thread(
+                chat_messages.collect_chat_messages,
+                eval_log,
+                run_id=run_id,
+                lab_name=lab_name,
+            ),
+            timeout=30.0,
+        )
+    except asyncio.TimeoutError:
+        payload = {
+            "chat_id": chat["chat_id"],
+            "run_id": run_id,
+            "lab_name": lab_name,
+            "eval_log": eval_log,
+            "messages": [],
+            "message_count": 0,
+            "error": "таймаут чтения .eval (файл ещё пишется?)",
+        }
+    except Exception as ex:  # noqa: BLE001
+        payload = {
+            "chat_id": chat["chat_id"],
+            "run_id": run_id,
+            "lab_name": lab_name,
+            "eval_log": eval_log,
+            "messages": [],
+            "message_count": 0,
+            "error": f"{type(ex).__name__}: {ex}",
+        }
+    return JSONResponse(payload)
 
 
 @app.get("/api/runs/{run_id}/live-panel", response_model=None)
