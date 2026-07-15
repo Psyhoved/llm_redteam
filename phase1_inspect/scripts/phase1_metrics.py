@@ -31,12 +31,14 @@ BEHAVIOR_ANSWER = "answer"
 @dataclass(frozen=True)
 class LogRef:
     path: Path
+    run_id: int | None = None
     lab_name: str = ""
 
 
 @dataclass
 class SampleRecord:
     log_file: str
+    run_id: int | None
     lab_name: str
     task_name: str
     sample_id: str
@@ -55,6 +57,10 @@ class SampleRecord:
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def build_chat_id(run_id: int | str, lab_name: str) -> str:
+    return f"run:{run_id}:lab:{lab_name}"
 
 
 def obj_get(obj: Any, key: str, default: Any = None) -> Any:
@@ -98,7 +104,7 @@ def logs_from_sqlite(
     conn = sqlite3.connect(str(sqlite_path))
     try:
         columns = sqlite_columns(conn, "lab_runs")
-        select_cols = ["lab_name"]
+        select_cols = ["run_id", "lab_name"]
         for column in ("eval_log", "stdout", "stderr"):
             if column in columns:
                 select_cols.append(column)
@@ -132,7 +138,9 @@ def logs_from_sqlite(
         for raw_path in candidates:
             path = resolve_log_path(raw_path, sqlite_base_dir).resolve()
             if path not in seen:
-                refs.append(LogRef(path=path, lab_name=lab_name))
+                refs.append(
+                    LogRef(path=path, run_id=int(data["run_id"]), lab_name=lab_name)
+                )
                 seen.add(path)
 
     return refs
@@ -301,6 +309,7 @@ def read_log_records(log_ref: LogRef, preferred_scorer: str = "") -> list[Sample
             records.append(
                 SampleRecord(
                     log_file=str(log_ref.path),
+                    run_id=log_ref.run_id,
                     lab_name=lab_name,
                     task_name=task_name,
                     sample_id=str(obj_get(summary, "id", "")),
@@ -327,6 +336,7 @@ def read_log_records(log_ref: LogRef, preferred_scorer: str = "") -> list[Sample
             records.append(
                 SampleRecord(
                     log_file=str(log_ref.path),
+                    run_id=log_ref.run_id,
                     lab_name=lab_name,
                     task_name=task_name,
                     sample_id=str(obj_get(summary, "id", "")),
@@ -431,6 +441,8 @@ def write_samples_csv(path: Path, records: list[SampleRecord]) -> None:
         writer = csv.DictWriter(
             f,
             fieldnames=[
+                "chat_id",
+                "run_id",
                 "lab_name",
                 "task_name",
                 "sample_id",
@@ -451,6 +463,11 @@ def write_samples_csv(path: Path, records: list[SampleRecord]) -> None:
         writer.writeheader()
         for record in records:
             row = asdict(record)
+            row["chat_id"] = (
+                build_chat_id(record.run_id, record.lab_name)
+                if record.run_id is not None and record.lab_name
+                else ""
+            )
             row["metadata"] = json.dumps(record.metadata, ensure_ascii=False, sort_keys=True)
             writer.writerow(row)
 
